@@ -1,27 +1,32 @@
 #include <iostream>
 #include <string>
-int main() {
-//setlocale(LC_ALL, "RU");
 using namespace std;
-  cout << std::unitbuf;
-  cerr << std::unitbuf;
- while(true) { 
- cout << "$ ";
- string input;
 
-  if(!getline(cin, input)){
-break;
-}
+int main() {
+    cout << unitbuf;
+    cerr << unitbuf;
+    
+    while(true) {
+        cout << "$ ";
+        string input;
+        
+        if(!getline(cin, input)) {
+            break;
+        }
 
+        if (input == "\\q") {
+            cout << "Exit" << endl;
+            break;
+        }
 
-if (input  ==  "\\q") {
-cout << "Exit"<< endl;
- break;
-}
-
-if(!input.empty()){ cout <<"Your entered string: " << input << endl;
+        if (input.find("echo ") == 0) {
+            string message = input.substr(5);
+            cout << message << endl;
+        }
+        else if (!input.empty()) {
+            cout << "ERROR" << endl;
+        }
     }
-   }
-return 0;
-
- }
+    
+    return 0;
+}
