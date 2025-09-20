@@ -1,17 +1,26 @@
 #include <iostream>
 #include <string>
 int main() {
-  std::cout << std::unitbuf;
-  std::cerr << std::unitbuf;
+//setlocale(LC_ALL, "RU");
+using namespace std;
+  cout << std::unitbuf;
+  cerr << std::unitbuf;
  while(true) { 
- std::cout << "$ ";
-  std::string input
-;
-  if(!std::getline(std::cin, input)){
+ cout << "$ ";
+ string input;
+
+  if(!getline(cin, input)){
 break;
 }
 
-if(!input.empty()){ std::cout << input <<  ": command not found" << std::endl;
+//if (input == "echo" ) cout
+
+if (input  ==  "\\q") {
+cout << "Exit"<< endl;
+ break;
+}
+
+if(!input.empty()){ cout <<"Your entered string: " << input << endl;
     }
    }
 return 0;
