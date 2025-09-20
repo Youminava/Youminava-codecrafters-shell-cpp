@@ -14,7 +14,6 @@ break;
 }
 
 
-
 if (input  ==  "\\q") {
 cout << "Exit"<< endl;
  break;
