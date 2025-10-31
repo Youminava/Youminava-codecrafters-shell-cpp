@@ -6,7 +6,7 @@ int main() {
     cout << unitbuf;
     
     string input;
-    if(getline(cin, input)) {
+    while(getline(cin, input)) {
         cout << input << endl;
     }
     
