@@ -7,8 +7,11 @@ int main() {
     cout << unitbuf;    
     string input;
    
-    string history_file = "/home/govno/kubsh_history";
-
+    const char* home_dir = getenv("HOME");
+    string history_file;
+    if(home_dir !=nullptr) {
+    history_file = string(home_dir) + "/kubsh_history"; }
+    else history_file = "/kubsh_history";
     while(true) {
      cout << "$ ";
     if(!getline(cin, input)) break; 
