@@ -7,8 +7,7 @@ int main() {
     
     string input;
     while(getline(cin, input)) {
-        cout << input << endl;
-    }
-    
-    return 0;
+     if(input == "\\q") {return 0;}
+   cout << input << endl;
+ }
 }
