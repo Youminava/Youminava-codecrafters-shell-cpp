@@ -18,11 +18,9 @@ int main() {
     while(true) {
     cout << "$ ";
     if(!getline(cin, input)) break; 
-
-    // простая проверка команды: допускаем \q, history, echo и help
     if(!input.empty()) {
       bool isValid = false;
-      if(input == "\\q" || input == "history" || input == "help") isValid = true;
+      if(input == "\\q" || input == "history") isValid = true;
       else if(input.find("echo ") == 0 || input == "echo") isValid = true;
 
       if(!isValid) {
@@ -32,16 +30,15 @@ int main() {
     }
 
     if(!input.empty() && input != "\\q" && input != "history") {
-      ofstream file(history_file, ios::app);
-      file << input << endl;
+    ofstream file(history_file, ios::app);
+    file << input << endl;
     }
-
     if(input == "\\q") {
-      return 0;
+    return 0;
     }
     else if(input.find("echo ") == 0) {
-      string message = input.substr(5);
-      cout << message << endl;
+    string message = input.substr(5);
+    cout << message << endl;
     } 
     else if(input == "history") {
       ifstream read_file(history_file);

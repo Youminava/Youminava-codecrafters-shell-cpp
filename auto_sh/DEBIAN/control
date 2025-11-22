@@ -1,0 +1,5 @@
+Package: kubsh
+Version: 1.0
+Architecture: all
+Maintainer: Your Name
+Description: Custom shell package

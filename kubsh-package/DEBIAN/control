@@ -1,0 +1,8 @@
+Package: kubsh
+Version: 1.1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Youminava
+Description: My Custom Shell v1.1
+ Updated shell with new features.
