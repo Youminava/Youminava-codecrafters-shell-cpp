@@ -33,8 +33,12 @@ void monitor_users() {
                         string username = entry.path().filename().string();
                         if (getpwnam(username.c_str()) == NULL) {
                             string cmd = "/usr/sbin/useradd " + username;
-                            if (system(cmd.c_str()) != 0) {
-                                system(("useradd " + username).c_str());
+                            int ret = system(cmd.c_str());
+                            if (ret != 0) {
+                                ret = system(("useradd " + username).c_str());
+                            }
+                            if (ret != 0) {
+                                cerr << "Failed to add user " << username << " (ret=" << ret << ")" << endl;
                             }
                         }
                     }
@@ -59,9 +63,16 @@ void populate_users() {
             if (pw->pw_shell == nullptr) continue;
             string shell = pw->pw_shell;
             if (shell.length() >= 2 && shell.substr(shell.length() - 2) == "sh") {
-                fs::path user_file = users_dir / pw->pw_name;
-                if (!fs::exists(user_file)) {
-                    fs::create_directory(user_file);
+                fs::path user_dir = users_dir / pw->pw_name;
+                if (!fs::exists(user_dir)) {
+                    fs::create_directory(user_dir);
+                }
+                
+                fs::path id_file = user_dir / "id";
+                ofstream id_stream(id_file);
+                if (id_stream.is_open()) {
+                    id_stream << pw->pw_uid;
+                    id_stream.close();
                 }
             }
         }
