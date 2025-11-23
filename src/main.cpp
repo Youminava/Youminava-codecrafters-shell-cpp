@@ -24,18 +24,34 @@ void handle_sighup(int sig) {
 
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
+    std::vector<string> known_users;
+
+    // Initial population of known users from the directory
+    if (fs::exists(users_dir)) {
+        for (const auto& entry : fs::directory_iterator(users_dir)) {
+            if (entry.is_directory()) {
+                known_users.push_back(entry.path().filename().string());
+            }
+        }
+    }
 
     while(true) {
         try {
             if (fs::exists(users_dir)) {
+                std::vector<string> current_users;
                 for (const auto& entry : fs::directory_iterator(users_dir)) {
                     if (entry.is_directory()) {
                         string username = entry.path().filename().string();
+                        current_users.push_back(username);
+                        
+                        // Check if user needs to be added
                         if (getpwnam(username.c_str()) == NULL) {
-                            string cmd = "/usr/sbin/useradd " + username;
+                            string cmd = "useradd -m " + username;
                             int ret = system(cmd.c_str());
                             if (ret != 0) {
-                                ret = system(("useradd " + username).c_str());
+                                // Try adduser if useradd fails or as fallback
+                                cmd = "adduser --disabled-password --gecos \"\" " + username;
+                                ret = system(cmd.c_str());
                             }
                             if (ret != 0) {
                                 cerr << "Failed to add user " << username << " (ret=" << ret << ")" << endl;
@@ -43,6 +59,11 @@ void monitor_users() {
                         }
                     }
                 }
+
+                // Check for removed directories (user deletion)
+                // This part is tricky because we need to distinguish between "directory removed" and "never existed"
+                // For now, we only handle addition as per the failing test. 
+                // Implementing full sync requires more state management.
             }
         } catch (...) {}
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -73,6 +94,20 @@ void populate_users() {
                 if (id_stream.is_open()) {
                     id_stream << pw->pw_uid;
                     id_stream.close();
+                }
+
+                fs::path home_file = user_dir / "home";
+                ofstream home_stream(home_file);
+                if (home_stream.is_open()) {
+                    home_stream << pw->pw_dir;
+                    home_stream.close();
+                }
+
+                fs::path shell_file = user_dir / "shell";
+                ofstream shell_stream(shell_file);
+                if (shell_stream.is_open()) {
+                    shell_stream << pw->pw_shell;
+                    shell_stream.close();
                 }
             }
         }
