@@ -10,6 +10,8 @@
 #include <iomanip>
 #include <pwd.h>
 #include <sys/wait.h>
+#include <thread>
+#include <chrono>
 using namespace std;
 namespace fs = std::filesystem;
 
@@ -20,14 +22,42 @@ void handle_sighup(int sig) {
     }
 }
 
+void monitor_users() {
+    const char* home = getenv("HOME");
+    fs::path users_dir;
+    if (!home) {
+        users_dir = fs::current_path() / "users";
+    } else {
+        users_dir = fs::path(home) / "users";
+    }
+
+    while(true) {
+        try {
+            if (fs::exists(users_dir)) {
+                for (const auto& entry : fs::directory_iterator(users_dir)) {
+                    if (entry.is_directory()) {
+                        string username = entry.path().filename().string();
+                        if (getpwnam(username.c_str()) == NULL) {
+                            string cmd = "useradd " + username;
+                            system(cmd.c_str());
+                        }
+                    }
+                }
+            }
+        } catch (...) {}
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+}
+
 void populate_users() {
     const char* home = getenv("HOME");
+    fs::path users_dir;
     if (!home) {
-        cerr << "HOME not set, skipping populate_users" << endl;
-        return;
+        users_dir = fs::current_path() / "users";
+    } else {
+        users_dir = fs::path(home) / "users";
     }
     
-    fs::path users_dir = fs::path(home) / "users";
     try {
         if (!fs::exists(users_dir)) {
             fs::create_directory(users_dir);
@@ -38,16 +68,8 @@ void populate_users() {
         while ((pw = getpwent()) != NULL) {
             fs::path user_file = users_dir / pw->pw_name;
             if (!fs::exists(user_file)) {
-                if (fs::create_directory(user_file)) {
-                     // Directory created
-                }
+                fs::create_directory(user_file);
             }
-            // We don't need to write details for the test, just the directory existence matches the user name
-            // But the previous code wrote a file. The test expects a directory?
-            // "vfs_users = [item for item in vfs.iterdir() if item.is_dir()]"
-            // Yes, the test expects directories!
-            // My previous code created a file: "ofstream outfile(user_file);"
-            // That was the mistake!
         }
         endpwent();
     } catch (const fs::filesystem_error& e) {
@@ -56,10 +78,10 @@ void populate_users() {
 }
 
 int main() {
-    // Populate users VFS on startup
     populate_users();
+    std::thread monitor(monitor_users);
+    monitor.detach();
 
-    // Handle SIGHUP to reload configuration
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_sighup;
@@ -88,7 +110,6 @@ int main() {
         continue;
     }
     if(!input.empty()) {
-      // Parse input first
       vector<string> args;
       string current_arg;
       bool in_quotes = false;
@@ -118,10 +139,8 @@ int main() {
       }
 
       if(!isBuiltin) {
-        // Execute external command
         pid_t pid = fork();
         if (pid == 0) {
-            // Child process
             vector<char*> c_args;
             for(const auto& arg : args) {
                 c_args.push_back(const_cast<char*>(arg.c_str()));
@@ -129,11 +148,9 @@ int main() {
             c_args.push_back(nullptr);
             
             execvp(c_args[0], c_args.data());
-            // If execvp returns, it failed
             cout << input << ": command not found" << endl;
             exit(1);
         } else if (pid > 0) {
-            // Parent process
             int status;
             waitpid(pid, &status, 0);
         } else {
@@ -150,8 +167,6 @@ int main() {
     if(input == "\\q") {
       return 0;
     }
-    
-    // Re-parse args for builtins (redundant but keeps existing logic structure)
     vector<string> args;
     string current_arg;
     bool in_quotes = false;
@@ -240,7 +255,6 @@ int main() {
                 if (!fs::exists(users_dir)) {
                     fs::create_directory(users_dir);
                 }
-                
                 struct passwd *pw;
                 setpwent();
                 while ((pw = getpwent()) != NULL) {
