@@ -23,13 +23,7 @@ void handle_sighup(int sig) {
 }
 
 void monitor_users() {
-    const char* home = getenv("HOME");
-    fs::path users_dir;
-    if (!home) {
-        users_dir = fs::current_path() / "users";
-    } else {
-        users_dir = fs::path(home) / "users";
-    }
+    fs::path users_dir = fs::current_path() / "users";
 
     while(true) {
         try {
@@ -45,18 +39,12 @@ void monitor_users() {
                 }
             }
         } catch (...) {}
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
 void populate_users() {
-    const char* home = getenv("HOME");
-    fs::path users_dir;
-    if (!home) {
-        users_dir = fs::current_path() / "users";
-    } else {
-        users_dir = fs::path(home) / "users";
-    }
+    fs::path users_dir = fs::current_path() / "users";
     
     try {
         if (!fs::exists(users_dir)) {
