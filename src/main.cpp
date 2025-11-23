@@ -12,6 +12,8 @@
 #include <sys/wait.h>
 #include <thread>
 #include <chrono>
+#include <sys/inotify.h>
+#include <fcntl.h>
 using namespace std;
 namespace fs = std::filesystem;
 
@@ -22,74 +24,116 @@ void handle_sighup(int sig) {
     }
 }
 
+void create_vfs_files(const string& username, const struct passwd* pw) {
+    try {
+        fs::path user_dir = fs::current_path() / "users" / username;
+        
+        ofstream id_file((user_dir / "id").string(), ios::out | ios::trunc);
+        if (id_file.is_open()) {
+            id_file << pw->pw_uid << flush;
+            id_file.close();
+        }
+
+        ofstream home_file((user_dir / "home").string(), ios::out | ios::trunc);
+        if (home_file.is_open()) {
+            home_file << pw->pw_dir << flush;
+            home_file.close();
+        }
+
+        ofstream shell_file((user_dir / "shell").string(), ios::out | ios::trunc);
+        if (shell_file.is_open()) {
+            shell_file << pw->pw_shell << flush;
+            shell_file.close();
+        }
+    } catch (...) {}
+}
+
+void process_user_directory(const string& username) {
+    // Check if user already exists
+    struct passwd *pw_check = getpwnam(username.c_str());
+    if (pw_check != NULL) {
+        return;
+    }
+    
+    // Use fork/exec for user creation
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        int devnull = open("/dev/null", O_WRONLY);
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
+        
+        execlp("useradd", "useradd", "-m", username.c_str(), nullptr);
+        _exit(1);
+    } else if (pid > 0) {
+        // Parent process
+        int status;
+        waitpid(pid, &status, 0);
+        
+        // Verify user was created and populate VFS files
+        struct passwd* pw_verify = getpwnam(username.c_str());
+        if (pw_verify != nullptr) {
+            create_vfs_files(username, pw_verify);
+        }
+    }
+}
+
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
     
-    // Debug: print effective UID
-    cerr << "Monitor: Running with UID=" << getuid() << ", EUID=" << geteuid() << endl;
-
+    // Create users directory if it doesn't exist
+    if (!fs::exists(users_dir)) {
+        fs::create_directories(users_dir);
+    }
+    
+    // Initialize inotify in non-blocking mode
+    int fd = inotify_init1(IN_NONBLOCK);
+    if (fd < 0) {
+        return;
+    }
+    
+    // Watch for directory creation in users/
+    int wd = inotify_add_watch(fd, users_dir.c_str(), IN_CREATE | IN_ISDIR);
+    if (wd < 0) {
+        close(fd);
+        return;
+    }
+    
+    // Process existing directories first
+    try {
+        for (const auto& entry : fs::directory_iterator(users_dir)) {
+            if (entry.is_directory()) {
+                string username = entry.path().filename().string();
+                process_user_directory(username);
+            }
+        }
+    } catch (...) {}
+    
+    // Monitor for new directories (non-blocking)
+    char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
+    
     while(true) {
-        try {
-            if (fs::exists(users_dir)) {
-                for (const auto& entry : fs::directory_iterator(users_dir)) {
-                    if (entry.is_directory()) {
-                        string username = entry.path().filename().string();
-                        
-                        // Check if user exists in system
-                        errno = 0;
-                        struct passwd *pw = getpwnam(username.c_str());
-                        if (pw == NULL) {
-                            cerr << "Monitor: Attempting to create user: " << username << endl;
-                            cerr.flush();
-                            
-                            // Try adduser first (Debian/Ubuntu preferred)
-                            string cmd = "adduser --disabled-password --gecos \"\" " + username + " 2>&1";
-                            cerr << "Monitor: Executing: " << cmd << endl;
-                            cerr.flush();
-                            
-                            int ret = system(cmd.c_str());
-                            cerr << "Monitor: adduser returned " << ret << " (WEXITSTATUS=" << WEXITSTATUS(ret) << ")" << endl;
-                            cerr.flush();
-                            
-                            if (ret != 0) {
-                                // Try useradd with full path
-                                cmd = "/usr/sbin/useradd -m " + username + " 2>&1";
-                                cerr << "Monitor: Executing: " << cmd << endl;
-                                cerr.flush();
-                                ret = system(cmd.c_str());
-                                cerr << "Monitor: useradd (full path) returned " << ret << " (WEXITSTATUS=" << WEXITSTATUS(ret) << ")" << endl;
-                                cerr.flush();
-                            }
-                            
-                            if (ret != 0) {
-                                // Try useradd without full path
-                                cmd = "useradd -m " + username + " 2>&1";
-                                cerr << "Monitor: Executing: " << cmd << endl;
-                                cerr.flush();
-                                ret = system(cmd.c_str());
-                                cerr << "Monitor: useradd (no path) returned " << ret << " (WEXITSTATUS=" << WEXITSTATUS(ret) << ")" << endl;
-                                cerr.flush();
-                            }
-                            
-                            // Verify user was created
-                            struct passwd* pw_verify = getpwnam(username.c_str());
-                            if (pw_verify != nullptr) {
-                                cerr << "Monitor: SUCCESS - User " << username << " exists in /etc/passwd (UID=" << pw_verify->pw_uid << ")" << endl;
-                                cerr.flush();
-                            } else {
-                                cerr << "Monitor: ERROR - User " << username << " NOT FOUND in /etc/passwd after creation!" << endl;
-                                cerr.flush();
-                            }
-                            
-                            // Give system time to update
-                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                        }
-                    }
+        ssize_t len = read(fd, buffer, sizeof(buffer));
+        if (len > 0) {
+            const struct inotify_event *event;
+            for (char *ptr = buffer; ptr < buffer + len; ptr += sizeof(struct inotify_event) + event->len) {
+                event = (const struct inotify_event *) ptr;
+                
+                if (event->mask & IN_CREATE && event->mask & IN_ISDIR) {
+                    string username = event->name;
+                    process_user_directory(username);
                 }
             }
-        } catch (...) {}
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } else if (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            break;
+        }
+        
+        // Very short sleep to not burn CPU
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
+    
+    close(fd);
 }
 
 void populate_users() {
@@ -162,6 +206,22 @@ int main() {
     else history_file = "/kubsh_history";
 
     while(true) {
+    // Check for new user directories before each prompt
+    fs::path users_dir = fs::current_path() / "users";
+    try {
+        if (fs::exists(users_dir)) {
+            for (const auto& entry : fs::directory_iterator(users_dir)) {
+                if (entry.is_directory()) {
+                    string username = entry.path().filename().string();
+                    struct passwd *pw = getpwnam(username.c_str());
+                    if (pw == NULL) {
+                        process_user_directory(username);
+                    }
+                }
+            }
+        }
+    } catch (...) {}
+    
     if (isatty(STDIN_FILENO)) {
         cout << "$ ";
     }
