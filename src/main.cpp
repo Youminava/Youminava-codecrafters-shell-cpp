@@ -32,10 +32,9 @@ void monitor_users() {
                     if (entry.is_directory()) {
                         string username = entry.path().filename().string();
                         if (getpwnam(username.c_str()) == NULL) {
-                            string cmd = "useradd " + username;
-                            int ret = system(cmd.c_str());
-                            if (ret != 0) {
-                                cerr << "Failed to add user " << username << endl;
+                            string cmd = "/usr/sbin/useradd " + username;
+                            if (system(cmd.c_str()) != 0) {
+                                system(("useradd " + username).c_str());
                             }
                         }
                     }
@@ -57,6 +56,7 @@ void populate_users() {
         struct passwd *pw;
         setpwent();
         while ((pw = getpwent()) != NULL) {
+            if (pw->pw_shell == nullptr) continue;
             string shell = pw->pw_shell;
             if (shell.length() >= 2 && shell.substr(shell.length() - 2) == "sh") {
                 fs::path user_file = users_dir / pw->pw_name;
