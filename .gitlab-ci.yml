@@ -4,8 +4,7 @@ stages:
   - package
 
 variables:
-  # Замените на имя вашего образа, если он публичный, или настройте доступ к приватному registry
-  TEST_IMAGE: "tyvik/kubsh_test:master" 
+  TEST_IMAGE: "tyvik/kubsh_test:master"
 
 build:
   stage: build
@@ -29,11 +28,8 @@ test:
   dependencies:
     - build
   script:
-    # Предполагаем, что тесты лежат в корне или в папке tests/
-    # Убедитесь, что pytest установлен в образе
     - chmod +x kubsh
     - pytest -v
-  # Если тесты требуют специфических настроек окружения, добавьте их здесь
 
 package:
   stage: package
@@ -48,7 +44,6 @@ package:
     - mkdir -p kubsh-package/usr/bin
     - cp kubsh kubsh-package/usr/bin/
     - chmod 755 kubsh-package/usr/bin/kubsh
-    # Убедитесь, что control файл существует и корректен
     - dpkg-deb --build kubsh-package kubsh_1.0_amd64.deb
   artifacts:
     paths:
