@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sstream>
 #include <csignal>
+#include <cstring>
 using namespace std;
 
 void handle_sighup(int sig) {
@@ -15,7 +16,14 @@ void handle_sighup(int sig) {
 }
 
 int main() {
-    signal(SIGHUP, handle_sighup);
+    // Handle SIGHUP to reload configuration
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_sighup;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGHUP, &sa, NULL);
+
     cout << unitbuf;    
     string input;
    
@@ -31,7 +39,11 @@ int main() {
     if (isatty(STDIN_FILENO)) {
         cout << "$ ";
     }
-    if(!getline(cin, input)) break; 
+    if(!getline(cin, input)) {
+        if (cin.eof()) break;
+        cin.clear();
+        continue;
+    }
     if(!input.empty()) {
       bool isValid = false;
       string cmdName;
