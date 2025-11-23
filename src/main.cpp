@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
+#include <sstream>
 using namespace std;
 
 int main() {
@@ -24,11 +25,9 @@ int main() {
     if(!getline(cin, input)) break; 
     if(!input.empty()) {
       bool isValid = false;
-      string cmdName = input;
-      size_t spacePos = input.find(' ');
-      if(spacePos != string::npos) {
-        cmdName = input.substr(0, spacePos);
-      }
+      string cmdName;
+      stringstream ss(input);
+      ss >> cmdName;
 
       if(cmdName == "\\q" || cmdName == "history" || cmdName == "help" || 
          cmdName == "exit" || cmdName == "type" || cmdName == "pwd" || 
