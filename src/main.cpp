@@ -34,26 +34,27 @@ void monitor_users() {
                         
                         // Check if user exists in system
                         errno = 0;
-                        if (getpwnam(username.c_str()) == NULL) {
-                            // Try multiple commands
-                            string cmd = "/usr/sbin/useradd -m " + username + " > /dev/null 2>&1";
+                        struct passwd *pw = getpwnam(username.c_str());
+                        if (pw == NULL) {
+                            // Try multiple commands - try with full path first
+                            string cmd = "/usr/sbin/useradd -m " + username + " 2>&1";
                             int ret = system(cmd.c_str());
                             
                             if (ret != 0) {
-                                cmd = "useradd -m " + username + " > /dev/null 2>&1";
+                                cmd = "useradd -m " + username + " 2>&1";
                                 ret = system(cmd.c_str());
                             }
                             
                             if (ret != 0) {
-                                cmd = "adduser --disabled-password --gecos \"\" " + username + " > /dev/null 2>&1";
-                                ret = system(cmd.c_str());
+                                cmd = "adduser --disabled-password --gecos \"\" " + username + " 2>&1";
+                                system(cmd.c_str());
                             }
                         }
                     }
                 }
             }
         } catch (...) {}
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
 
@@ -62,7 +63,7 @@ void populate_users() {
     
     try {
         if (!fs::exists(users_dir)) {
-            fs::create_directory(users_dir);
+            fs::create_directories(users_dir);
         }
         
         struct passwd *pw;
@@ -73,22 +74,25 @@ void populate_users() {
             if (shell.length() >= 2 && shell.substr(shell.length() - 2) == "sh") {
                 fs::path user_dir = users_dir / pw->pw_name;
                 if (!fs::exists(user_dir)) {
-                    fs::create_directory(user_dir);
+                    fs::create_directories(user_dir);
                 }
                 
-                {
-                    ofstream f(user_dir / "id");
-                    f << pw->pw_uid;
+                ofstream id_file(user_dir / "id");
+                if (id_file.is_open()) {
+                    id_file << pw->pw_uid;
+                    id_file.close();
                 }
 
-                {
-                    ofstream f(user_dir / "home");
-                    f << pw->pw_dir;
+                ofstream home_file(user_dir / "home");
+                if (home_file.is_open()) {
+                    home_file << pw->pw_dir;
+                    home_file.close();
                 }
 
-                {
-                    ofstream f(user_dir / "shell");
-                    f << pw->pw_shell;
+                ofstream shell_file(user_dir / "shell");
+                if (shell_file.is_open()) {
+                    shell_file << pw->pw_shell;
+                    shell_file.close();
                 }
             }
         }
