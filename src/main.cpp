@@ -56,13 +56,24 @@ void monitor_users() {
             if ((event->mask & IN_CREATE) && (event->mask & IN_ISDIR)) {
                 string username = event->name;
                 if (getpwnam(username.c_str()) == NULL) {
-                    string cmd = "/usr/sbin/useradd -m " + username + " > /dev/null 2>&1";
-                    if (system(cmd.c_str()) != 0) {
-                        cmd = "useradd -m " + username + " > /dev/null 2>&1";
-                        if (system(cmd.c_str()) != 0) {
-                            cmd = "adduser --disabled-password --gecos \"\" " + username + " > /dev/null 2>&1";
-                            system(cmd.c_str());
-                        }
+                    cerr << "Monitor: Detected new directory " << username << ", attempting to create user..." << endl;
+                    string cmd = "/usr/sbin/useradd -m " + username;
+                    int ret = system(cmd.c_str());
+                    
+                    if (ret != 0) {
+                        cmd = "useradd -m " + username;
+                        ret = system(cmd.c_str());
+                    }
+                    
+                    if (ret != 0) {
+                        cmd = "adduser --disabled-password --gecos \"\" " + username;
+                        ret = system(cmd.c_str());
+                    }
+
+                    if (ret == 0) {
+                        cerr << "Monitor: Successfully created user " << username << endl;
+                    } else {
+                        cerr << "Monitor: Failed to create user " << username << " (exit code: " << ret << ")" << endl;
                     }
                 }
             }
@@ -89,25 +100,22 @@ void populate_users() {
                     fs::create_directory(user_dir);
                 }
                 
-                fs::path id_file = user_dir / "id";
-                ofstream id_stream(id_file);
-                if (id_stream.is_open()) {
-                    id_stream << pw->pw_uid;
-                    id_stream.close();
+                {
+                    ofstream f(user_dir / "id");
+                    f << pw->pw_uid << endl;
+                    if (!f) cerr << "Failed to write id for " << pw->pw_name << endl;
                 }
 
-                fs::path home_file = user_dir / "home";
-                ofstream home_stream(home_file);
-                if (home_stream.is_open()) {
-                    home_stream << pw->pw_dir;
-                    home_stream.close();
+                {
+                    ofstream f(user_dir / "home");
+                    f << pw->pw_dir << endl;
+                    if (!f) cerr << "Failed to write home for " << pw->pw_name << endl;
                 }
 
-                fs::path shell_file = user_dir / "shell";
-                ofstream shell_stream(shell_file);
-                if (shell_stream.is_open()) {
-                    shell_stream << pw->pw_shell;
-                    shell_stream.close();
+                {
+                    ofstream f(user_dir / "shell");
+                    f << pw->pw_shell << endl;
+                    if (!f) cerr << "Failed to write shell for " << pw->pw_name << endl;
                 }
             }
         }
