@@ -24,6 +24,9 @@ void handle_sighup(int sig) {
 
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
+    
+    // Debug: print effective UID
+    cerr << "Monitor: Running with UID=" << getuid() << ", EUID=" << geteuid() << endl;
 
     while(true) {
         try {
@@ -36,25 +39,40 @@ void monitor_users() {
                         errno = 0;
                         struct passwd *pw = getpwnam(username.c_str());
                         if (pw == NULL) {
-                            // Try multiple commands - try with full path first
-                            string cmd = "/usr/sbin/useradd -m " + username + " 2>&1";
+                            cerr << "Monitor: Attempting to create user: " << username << endl;
+                            
+                            // Try adduser first (Debian/Ubuntu preferred)
+                            string cmd = "adduser --disabled-password --gecos \"\" " + username + " 2>&1";
                             int ret = system(cmd.c_str());
+                            cerr << "Monitor: adduser returned " << ret << endl;
                             
                             if (ret != 0) {
-                                cmd = "useradd -m " + username + " 2>&1";
+                                // Try useradd with full path
+                                cmd = "/usr/sbin/useradd -m " + username + " 2>&1";
                                 ret = system(cmd.c_str());
+                                cerr << "Monitor: useradd (full path) returned " << ret << endl;
                             }
                             
                             if (ret != 0) {
-                                cmd = "adduser --disabled-password --gecos \"\" " + username + " 2>&1";
-                                system(cmd.c_str());
+                                // Try useradd without full path
+                                cmd = "useradd -m " + username + " 2>&1";
+                                ret = system(cmd.c_str());
+                                cerr << "Monitor: useradd (no path) returned " << ret << endl;
+                            }
+                            
+                            if (ret == 0) {
+                                cerr << "Monitor: Successfully created user " << username << endl;
+                                // Give system time to update /etc/passwd
+                                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                            } else {
+                                cerr << "Monitor: Failed to create user " << username << endl;
                             }
                         }
                     }
                 }
             }
         } catch (...) {}
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
