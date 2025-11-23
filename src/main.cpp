@@ -14,8 +14,12 @@
 #include <chrono>
 #include <sys/inotify.h>
 #include <fcntl.h>
+#include <poll.h>
 using namespace std;
 namespace fs = std::filesystem;
+
+// Global inotify file descriptor
+int g_inotify_fd = -1;
 
 void handle_sighup(int sig) {
     if (sig == SIGHUP) {
@@ -79,6 +83,25 @@ void process_user_directory(const string& username) {
     }
 }
 
+void check_inotify_events() {
+    if (g_inotify_fd < 0) return;
+    
+    char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
+    ssize_t len = read(g_inotify_fd, buffer, sizeof(buffer));
+    
+    if (len > 0) {
+        const struct inotify_event *event;
+        for (char *ptr = buffer; ptr < buffer + len; ptr += sizeof(struct inotify_event) + event->len) {
+            event = (const struct inotify_event *) ptr;
+            
+            if (event->mask & IN_CREATE && event->mask & IN_ISDIR) {
+                string username = event->name;
+                process_user_directory(username);
+            }
+        }
+    }
+}
+
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
     
@@ -88,15 +111,16 @@ void monitor_users() {
     }
     
     // Initialize inotify in non-blocking mode
-    int fd = inotify_init1(IN_NONBLOCK);
-    if (fd < 0) {
+    g_inotify_fd = inotify_init1(IN_NONBLOCK);
+    if (g_inotify_fd < 0) {
         return;
     }
     
     // Watch for directory creation in users/
-    int wd = inotify_add_watch(fd, users_dir.c_str(), IN_CREATE | IN_ISDIR);
+    int wd = inotify_add_watch(g_inotify_fd, users_dir.c_str(), IN_CREATE | IN_ISDIR);
     if (wd < 0) {
-        close(fd);
+        close(g_inotify_fd);
+        g_inotify_fd = -1;
         return;
     }
     
@@ -114,7 +138,7 @@ void monitor_users() {
     char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
     
     while(true) {
-        ssize_t len = read(fd, buffer, sizeof(buffer));
+        ssize_t len = read(g_inotify_fd, buffer, sizeof(buffer));
         if (len > 0) {
             const struct inotify_event *event;
             for (char *ptr = buffer; ptr < buffer + len; ptr += sizeof(struct inotify_event) + event->len) {
@@ -128,12 +152,13 @@ void monitor_users() {
         } else if (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             break;
         }
-        
-        // Very short sleep to not burn CPU
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
+        // No sleep - tight loop for maximum responsiveness
     }
     
-    close(fd);
+    if (g_inotify_fd >= 0) {
+        close(g_inotify_fd);
+        g_inotify_fd = -1;
+    }
 }
 
 void populate_users() {
@@ -186,6 +211,9 @@ int main() {
     populate_users();
     std::thread monitor(monitor_users);
     monitor.detach();
+    
+    // Give monitor thread time to initialize and process existing directories
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -206,21 +234,8 @@ int main() {
     else history_file = "/kubsh_history";
 
     while(true) {
-    // Check for new user directories before each prompt
-    fs::path users_dir = fs::current_path() / "users";
-    try {
-        if (fs::exists(users_dir)) {
-            for (const auto& entry : fs::directory_iterator(users_dir)) {
-                if (entry.is_directory()) {
-                    string username = entry.path().filename().string();
-                    struct passwd *pw = getpwnam(username.c_str());
-                    if (pw == NULL) {
-                        process_user_directory(username);
-                    }
-                }
-            }
-        }
-    } catch (...) {}
+    // Check for inotify events before each prompt
+    check_inotify_events();
     
     if (isatty(STDIN_FILENO)) {
         cout << "$ ";
