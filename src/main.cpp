@@ -24,49 +24,47 @@ void handle_sighup(int sig) {
 
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
-    std::vector<string> known_users;
-
-    // Initial population of known users from the directory
-    if (fs::exists(users_dir)) {
-        for (const auto& entry : fs::directory_iterator(users_dir)) {
-            if (entry.is_directory()) {
-                known_users.push_back(entry.path().filename().string());
-            }
-        }
-    }
 
     while(true) {
         try {
             if (fs::exists(users_dir)) {
-                std::vector<string> current_users;
                 for (const auto& entry : fs::directory_iterator(users_dir)) {
                     if (entry.is_directory()) {
                         string username = entry.path().filename().string();
-                        current_users.push_back(username);
                         
-                        // Check if user needs to be added
+                        // Check if user exists in system
+                        errno = 0;
                         if (getpwnam(username.c_str()) == NULL) {
-                            string cmd = "useradd -m " + username;
+                            // User does not exist, create it
+                            cerr << "Monitor: Found new directory for " << username << ", creating user..." << endl;
+                            
+                            // Try multiple commands
+                            string cmd = "/usr/sbin/useradd -m " + username;
                             int ret = system(cmd.c_str());
+                            
                             if (ret != 0) {
-                                // Try adduser if useradd fails or as fallback
+                                cmd = "useradd -m " + username;
+                                ret = system(cmd.c_str());
+                            }
+                            
+                            if (ret != 0) {
                                 cmd = "adduser --disabled-password --gecos \"\" " + username;
                                 ret = system(cmd.c_str());
                             }
-                            if (ret != 0) {
-                                cerr << "Failed to add user " << username << " (ret=" << ret << ")" << endl;
+                            
+                            if (ret == 0) {
+                                cerr << "Monitor: Successfully created user " << username << endl;
+                            } else {
+                                cerr << "Monitor: Failed to create user " << username << " (ret=" << ret << ")" << endl;
                             }
                         }
                     }
                 }
-
-                // Check for removed directories (user deletion)
-                // This part is tricky because we need to distinguish between "directory removed" and "never existed"
-                // For now, we only handle addition as per the failing test. 
-                // Implementing full sync requires more state management.
             }
-        } catch (...) {}
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        } catch (const std::exception& e) {
+            cerr << "Monitor error: " << e.what() << endl;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
