@@ -36,6 +36,9 @@ test:
     - chmod +x kubsh
     # Тесты находятся в /opt внутри образа. Копируем их в текущую папку.
     - cp -r /opt/* .
+    # Добавляем текущую директорию в PATH, чтобы тесты нашли kubsh
+    - export PATH=$PATH:$(pwd)
+    - ls -la
     - pytest -v
 package:
   stage: package
