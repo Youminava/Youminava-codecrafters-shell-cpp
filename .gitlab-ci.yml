@@ -10,6 +10,8 @@ variables:
 build:
   stage: build
   image: gcc:12
+  tags:
+    - linux
   before_script:
     - apt-get update && apt-get install -y make
   script:
@@ -22,6 +24,8 @@ build:
 test:
   stage: test
   image: $TEST_IMAGE
+  tags:
+    - linux
   dependencies:
     - build
   script:
@@ -34,6 +38,8 @@ test:
 package:
   stage: package
   image: debian:stable-slim
+  tags:
+    - linux
   dependencies:
     - build
   before_script:
