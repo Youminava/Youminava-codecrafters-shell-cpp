@@ -77,21 +77,21 @@ void populate_users() {
                     fs::create_directories(user_dir);
                 }
                 
-                ofstream id_file(user_dir / "id");
+                ofstream id_file((user_dir / "id").string(), ios::out | ios::trunc);
                 if (id_file.is_open()) {
-                    id_file << pw->pw_uid;
+                    id_file << pw->pw_uid << flush;
                     id_file.close();
                 }
 
-                ofstream home_file(user_dir / "home");
+                ofstream home_file((user_dir / "home").string(), ios::out | ios::trunc);
                 if (home_file.is_open()) {
-                    home_file << pw->pw_dir;
+                    home_file << pw->pw_dir << flush;
                     home_file.close();
                 }
 
-                ofstream shell_file(user_dir / "shell");
+                ofstream shell_file((user_dir / "shell").string(), ios::out | ios::trunc);
                 if (shell_file.is_open()) {
-                    shell_file << pw->pw_shell;
+                    shell_file << pw->pw_shell << flush;
                     shell_file.close();
                 }
             }
@@ -99,6 +99,8 @@ void populate_users() {
         endpwent();
     } catch (const fs::filesystem_error& e) {
         cerr << "Error populating users: " << e.what() << endl;
+    } catch (const exception& e) {
+        cerr << "Error: " << e.what() << endl;
     }
 }
 
