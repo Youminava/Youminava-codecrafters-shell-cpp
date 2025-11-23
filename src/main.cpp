@@ -47,14 +47,19 @@ void monitor_users() {
                             
                             if (ret != 0) {
                                 cmd = "adduser --disabled-password --gecos \"\" " + username + " 2>&1";
-                                system(cmd.c_str());
+                                ret = system(cmd.c_str());
+                            }
+                            
+                            // Give system time to update /etc/passwd
+                            if (ret == 0) {
+                                std::this_thread::sleep_for(std::chrono::milliseconds(50));
                             }
                         }
                     }
                 }
             }
         } catch (...) {}
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
