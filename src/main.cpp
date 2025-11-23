@@ -24,46 +24,39 @@ void handle_sighup(int sig) {
 
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
-    std::vector<string> known_users;
-
-    // Initial population of known users from the directory
-    if (fs::exists(users_dir)) {
-        for (const auto& entry : fs::directory_iterator(users_dir)) {
-            if (entry.is_directory()) {
-                known_users.push_back(entry.path().filename().string());
-            }
-        }
-    }
 
     while(true) {
         try {
             if (fs::exists(users_dir)) {
-                std::vector<string> current_users;
                 for (const auto& entry : fs::directory_iterator(users_dir)) {
                     if (entry.is_directory()) {
                         string username = entry.path().filename().string();
-                        current_users.push_back(username);
                         
-                        // Check if user needs to be added
-                        if (getpwnam(username.c_str()) == NULL) {
-                            string cmd = "useradd -m " + username;
+                        // Check if user exists in system
+                        errno = 0;
+                        struct passwd *pw = getpwnam(username.c_str());
+                        if (pw == NULL) {
+                            // Try multiple commands - try with full path first
+                            string cmd = "/usr/sbin/useradd -m " + username + " 2>&1";
                             int ret = system(cmd.c_str());
+                            
                             if (ret != 0) {
-                                // Try adduser if useradd fails or as fallback
-                                cmd = "adduser --disabled-password --gecos \"\" " + username;
+                                cmd = "useradd -m " + username + " 2>&1";
                                 ret = system(cmd.c_str());
                             }
+                            
                             if (ret != 0) {
-                                cerr << "Failed to add user " << username << " (ret=" << ret << ")" << endl;
+                                cmd = "adduser --disabled-password --gecos \"\" " + username + " 2>&1";
+                                ret = system(cmd.c_str());
+                            }
+                            
+                            // Give system time to update /etc/passwd
+                            if (ret == 0) {
+                                std::this_thread::sleep_for(std::chrono::milliseconds(50));
                             }
                         }
                     }
                 }
-
-                // Check for removed directories (user deletion)
-                // This part is tricky because we need to distinguish between "directory removed" and "never existed"
-                // For now, we only handle addition as per the failing test. 
-                // Implementing full sync requires more state management.
             }
         } catch (...) {}
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -75,7 +68,7 @@ void populate_users() {
     
     try {
         if (!fs::exists(users_dir)) {
-            fs::create_directory(users_dir);
+            fs::create_directories(users_dir);
         }
         
         struct passwd *pw;
@@ -86,34 +79,33 @@ void populate_users() {
             if (shell.length() >= 2 && shell.substr(shell.length() - 2) == "sh") {
                 fs::path user_dir = users_dir / pw->pw_name;
                 if (!fs::exists(user_dir)) {
-                    fs::create_directory(user_dir);
+                    fs::create_directories(user_dir);
                 }
                 
-                fs::path id_file = user_dir / "id";
-                ofstream id_stream(id_file);
-                if (id_stream.is_open()) {
-                    id_stream << pw->pw_uid;
-                    id_stream.close();
+                ofstream id_file((user_dir / "id").string(), ios::out | ios::trunc);
+                if (id_file.is_open()) {
+                    id_file << pw->pw_uid << flush;
+                    id_file.close();
                 }
 
-                fs::path home_file = user_dir / "home";
-                ofstream home_stream(home_file);
-                if (home_stream.is_open()) {
-                    home_stream << pw->pw_dir;
-                    home_stream.close();
+                ofstream home_file((user_dir / "home").string(), ios::out | ios::trunc);
+                if (home_file.is_open()) {
+                    home_file << pw->pw_dir << flush;
+                    home_file.close();
                 }
 
-                fs::path shell_file = user_dir / "shell";
-                ofstream shell_stream(shell_file);
-                if (shell_stream.is_open()) {
-                    shell_stream << pw->pw_shell;
-                    shell_stream.close();
+                ofstream shell_file((user_dir / "shell").string(), ios::out | ios::trunc);
+                if (shell_file.is_open()) {
+                    shell_file << pw->pw_shell << flush;
+                    shell_file.close();
                 }
             }
         }
         endpwent();
     } catch (const fs::filesystem_error& e) {
         cerr << "Error populating users: " << e.what() << endl;
+    } catch (const exception& e) {
+        cerr << "Error: " << e.what() << endl;
     }
 }
 
