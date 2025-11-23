@@ -32,7 +32,7 @@ int main() {
 
       if(cmdName == "\\q" || cmdName == "history" || cmdName == "help" || 
          cmdName == "exit" || cmdName == "type" || cmdName == "pwd" || 
-         cmdName == "cd" || cmdName == "echo" || cmdName == "debug") {
+         cmdName == "cd" || cmdName == "echo" || cmdName == "debug" || cmdName == "\\e") {
         isValid = true;
       }
 
@@ -74,6 +74,26 @@ int main() {
         }
         cout << endl;
     } 
+    else if(!args.empty() && args[0] == "\\e") {
+        if (args.size() > 1) {
+            string var = args[1];
+            if (var.size() > 0 && var[0] == '$') {
+                var = var.substr(1);
+            }
+            const char* env_val = getenv(var.c_str());
+            if (env_val) {
+                string val = env_val;
+                size_t start = 0;
+                size_t end = val.find(':');
+                while (end != string::npos) {
+                    cout << val.substr(start, end - start) << endl;
+                    start = end + 1;
+                    end = val.find(':', start);
+                }
+                cout << val.substr(start) << endl;
+            }
+        }
+    }
     else if(input == "history") {
       ifstream read_file(history_file);
       string line;
