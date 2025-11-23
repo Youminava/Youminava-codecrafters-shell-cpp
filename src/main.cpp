@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <pwd.h>
 #include <sys/wait.h>
+#include <sys/inotify.h>
 #include <thread>
 #include <chrono>
 using namespace std;
@@ -25,46 +26,47 @@ void handle_sighup(int sig) {
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
 
+    // Wait for directory to be created
+    while (!fs::exists(users_dir)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    int fd = inotify_init();
+    if (fd < 0) {
+        cerr << "inotify_init failed" << endl;
+        return;
+    }
+
+    int wd = inotify_add_watch(fd, users_dir.c_str(), IN_CREATE | IN_ISDIR);
+    if (wd < 0) {
+        cerr << "inotify_add_watch failed" << endl;
+        return;
+    }
+
     while(true) {
-        try {
-            if (fs::exists(users_dir)) {
-                for (const auto& entry : fs::directory_iterator(users_dir)) {
-                    if (entry.is_directory()) {
-                        string username = entry.path().filename().string();
-                        
-                        // Check if user exists in system
-                        errno = 0;
-                        if (getpwnam(username.c_str()) == NULL) {
-                            // User does not exist, create it
-                            cerr << "Monitor: Found new directory for " << username << ", creating user..." << endl;
-                            
-                            // Try multiple commands
-                            string cmd = "/usr/sbin/useradd -m " + username;
-                            int ret = system(cmd.c_str());
-                            
-                            if (ret != 0) {
-                                cmd = "useradd -m " + username;
-                                ret = system(cmd.c_str());
-                            }
-                            
-                            if (ret != 0) {
-                                cmd = "adduser --disabled-password --gecos \"\" " + username;
-                                ret = system(cmd.c_str());
-                            }
-                            
-                            if (ret == 0) {
-                                cerr << "Monitor: Successfully created user " << username << endl;
-                            } else {
-                                cerr << "Monitor: Failed to create user " << username << " (ret=" << ret << ")" << endl;
-                            }
+        char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
+        ssize_t len = read(fd, buffer, sizeof(buffer));
+        if (len < 0) {
+            break;
+        }
+
+        const struct inotify_event *event;
+        for (char *ptr = buffer; ptr < buffer + len; ptr += sizeof(struct inotify_event) + event->len) {
+            event = (const struct inotify_event *) ptr;
+            if ((event->mask & IN_CREATE) && (event->mask & IN_ISDIR)) {
+                string username = event->name;
+                if (getpwnam(username.c_str()) == NULL) {
+                    string cmd = "/usr/sbin/useradd -m " + username + " > /dev/null 2>&1";
+                    if (system(cmd.c_str()) != 0) {
+                        cmd = "useradd -m " + username + " > /dev/null 2>&1";
+                        if (system(cmd.c_str()) != 0) {
+                            cmd = "adduser --disabled-password --gecos \"\" " + username + " > /dev/null 2>&1";
+                            system(cmd.c_str());
                         }
                     }
                 }
             }
-        } catch (const std::exception& e) {
-            cerr << "Monitor error: " << e.what() << endl;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
