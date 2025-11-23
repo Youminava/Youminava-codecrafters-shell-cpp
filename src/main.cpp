@@ -48,8 +48,6 @@ int main() {
     if(input == "\\q") {
       return 0;
     }
-    
-    // Parse input to handle quotes for echo and debug
     vector<string> args;
     string current_arg;
     bool in_quotes = false;
