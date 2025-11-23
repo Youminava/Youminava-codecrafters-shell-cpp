@@ -40,33 +40,49 @@ void monitor_users() {
                         struct passwd *pw = getpwnam(username.c_str());
                         if (pw == NULL) {
                             cerr << "Monitor: Attempting to create user: " << username << endl;
+                            cerr.flush();
                             
                             // Try adduser first (Debian/Ubuntu preferred)
                             string cmd = "adduser --disabled-password --gecos \"\" " + username + " 2>&1";
+                            cerr << "Monitor: Executing: " << cmd << endl;
+                            cerr.flush();
+                            
                             int ret = system(cmd.c_str());
-                            cerr << "Monitor: adduser returned " << ret << endl;
+                            cerr << "Monitor: adduser returned " << ret << " (WEXITSTATUS=" << WEXITSTATUS(ret) << ")" << endl;
+                            cerr.flush();
                             
                             if (ret != 0) {
                                 // Try useradd with full path
                                 cmd = "/usr/sbin/useradd -m " + username + " 2>&1";
+                                cerr << "Monitor: Executing: " << cmd << endl;
+                                cerr.flush();
                                 ret = system(cmd.c_str());
-                                cerr << "Monitor: useradd (full path) returned " << ret << endl;
+                                cerr << "Monitor: useradd (full path) returned " << ret << " (WEXITSTATUS=" << WEXITSTATUS(ret) << ")" << endl;
+                                cerr.flush();
                             }
                             
                             if (ret != 0) {
                                 // Try useradd without full path
                                 cmd = "useradd -m " + username + " 2>&1";
+                                cerr << "Monitor: Executing: " << cmd << endl;
+                                cerr.flush();
                                 ret = system(cmd.c_str());
-                                cerr << "Monitor: useradd (no path) returned " << ret << endl;
+                                cerr << "Monitor: useradd (no path) returned " << ret << " (WEXITSTATUS=" << WEXITSTATUS(ret) << ")" << endl;
+                                cerr.flush();
                             }
                             
-                            if (ret == 0) {
-                                cerr << "Monitor: Successfully created user " << username << endl;
-                                // Give system time to update /etc/passwd
-                                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                            // Verify user was created
+                            struct passwd* pw_verify = getpwnam(username.c_str());
+                            if (pw_verify != nullptr) {
+                                cerr << "Monitor: SUCCESS - User " << username << " exists in /etc/passwd (UID=" << pw_verify->pw_uid << ")" << endl;
+                                cerr.flush();
                             } else {
-                                cerr << "Monitor: Failed to create user " << username << endl;
+                                cerr << "Monitor: ERROR - User " << username << " NOT FOUND in /etc/passwd after creation!" << endl;
+                                cerr.flush();
                             }
+                            
+                            // Give system time to update
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         }
                     }
                 }
