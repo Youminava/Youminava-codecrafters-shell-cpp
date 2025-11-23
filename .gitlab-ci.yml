@@ -30,7 +30,6 @@ test:
   script:
     - chmod +x kubsh
     - pytest -v
-
 package:
   stage: package
   image: debian:stable-slim
