@@ -6,7 +6,12 @@
 #include <sstream>
 #include <csignal>
 #include <cstring>
+#include <filesystem>
+#include <iomanip>
+#include <pwd.h>
+#include <sys/wait.h>
 using namespace std;
+namespace fs = std::filesystem;
 
 void handle_sighup(int sig) {
     if (sig == SIGHUP) {
@@ -15,7 +20,37 @@ void handle_sighup(int sig) {
     }
 }
 
+void populate_users() {
+    const char* home = getenv("HOME");
+    if (!home) return;
+    
+    fs::path users_dir = fs::path(home) / "users";
+    try {
+        if (!fs::exists(users_dir)) {
+            fs::create_directory(users_dir);
+        }
+        
+        struct passwd *pw;
+        setpwent();
+        while ((pw = getpwent()) != NULL) {
+            fs::path user_file = users_dir / pw->pw_name;
+            ofstream outfile(user_file);
+            outfile << "Username: " << pw->pw_name << endl;
+            outfile << "UID: " << pw->pw_uid << endl;
+            outfile << "GID: " << pw->pw_gid << endl;
+            outfile << "Home: " << pw->pw_dir << endl;
+            outfile << "Shell: " << pw->pw_shell << endl;
+        }
+        endpwent();
+    } catch (const fs::filesystem_error& e) {
+        cerr << "Error populating users: " << e.what() << endl;
+    }
+}
+
 int main() {
+    // Populate users VFS on startup
+    populate_users();
+
     // Handle SIGHUP to reload configuration
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -45,19 +80,57 @@ int main() {
         continue;
     }
     if(!input.empty()) {
-      bool isValid = false;
-      string cmdName;
-      stringstream ss(input);
-      ss >> cmdName;
+      // Parse input first
+      vector<string> args;
+      string current_arg;
+      bool in_quotes = false;
+      for(char c : input) {
+          if(c == '\'') {
+              in_quotes = !in_quotes;
+          } else if(c == ' ' && !in_quotes) {
+              if(!current_arg.empty()) {
+                  args.push_back(current_arg);
+                  current_arg.clear();
+              }
+          } else {
+              current_arg += c;
+          }
+      }
+      if(!current_arg.empty()) args.push_back(current_arg);
 
+      if (args.empty()) continue;
+      string cmdName = args[0];
+
+      bool isBuiltin = false;
       if(cmdName == "\\q" || cmdName == "history" || cmdName == "help" || 
          cmdName == "exit" || cmdName == "type" || cmdName == "pwd" || 
-         cmdName == "cd" || cmdName == "echo" || cmdName == "debug" || cmdName == "\\e") {
-        isValid = true;
+         cmdName == "cd" || cmdName == "echo" || cmdName == "debug" || cmdName == "\\e" ||
+         cmdName == "\\l" || cmdName == "\\mount_users") {
+        isBuiltin = true;
       }
 
-      if(!isValid) {
-        cout << input << ": command not found" << endl;
+      if(!isBuiltin) {
+        // Execute external command
+        pid_t pid = fork();
+        if (pid == 0) {
+            // Child process
+            vector<char*> c_args;
+            for(const auto& arg : args) {
+                c_args.push_back(const_cast<char*>(arg.c_str()));
+            }
+            c_args.push_back(nullptr);
+            
+            execvp(c_args[0], c_args.data());
+            // If execvp returns, it failed
+            cerr << input << ": command not found" << endl;
+            exit(1);
+        } else if (pid > 0) {
+            // Parent process
+            int status;
+            waitpid(pid, &status, 0);
+        } else {
+            cerr << "Fork failed" << endl;
+        }
         continue;
       }
     }
@@ -69,6 +142,8 @@ int main() {
     if(input == "\\q") {
       return 0;
     }
+    
+    // Re-parse args for builtins (redundant but keeps existing logic structure)
     vector<string> args;
     string current_arg;
     bool in_quotes = false;
@@ -109,6 +184,70 @@ int main() {
                     end = val.find(':', start);
                 }
                 cout << val.substr(start) << endl;
+            }
+        }
+    }
+    else if(!args.empty() && args[0] == "\\l") {
+        if (args.size() < 2) {
+            cerr << "Usage: \\l <device>" << endl;
+        } else {
+            string device = args[1];
+            ifstream dev_file(device, ios::binary);
+            if (!dev_file) {
+                cerr << "Failed to open device: " << device << endl;
+            } else {
+                uint8_t mbr[512];
+                if (!dev_file.read(reinterpret_cast<char*>(mbr), 512)) {
+                    cerr << "Failed to read MBR" << endl;
+                } else {
+                    if (mbr[510] != 0x55 || mbr[511] != 0xAA) {
+                        cerr << "Invalid MBR signature" << endl;
+                    } else {
+                        cout << "Partition table for " << device << ":" << endl;
+                        cout << "Boot Start LBA Size Type" << endl;
+                        for (int i = 0; i < 4; ++i) {
+                            int offset = 446 + i * 16;
+                            uint8_t status = mbr[offset];
+                            uint8_t type = mbr[offset + 4];
+                            uint32_t lba_start = *reinterpret_cast<uint32_t*>(&mbr[offset + 8]);
+                            uint32_t size = *reinterpret_cast<uint32_t*>(&mbr[offset + 12]);
+                            
+                            cout << (status == 0x80 ? "*" : " ") << "    "
+                                 << setw(10) << lba_start << " "
+                                 << setw(10) << size << " "
+                                 << hex << setw(2) << setfill('0') << (int)type << dec << setfill(' ') << endl;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else if(!args.empty() && args[0] == "\\mount_users") {
+        const char* home = getenv("HOME");
+        if (!home) {
+            cerr << "HOME not set" << endl;
+        } else {
+            fs::path users_dir = fs::path(home) / "users";
+            try {
+                if (!fs::exists(users_dir)) {
+                    fs::create_directory(users_dir);
+                }
+                
+                struct passwd *pw;
+                setpwent();
+                while ((pw = getpwent()) != NULL) {
+                    fs::path user_file = users_dir / pw->pw_name;
+                    ofstream outfile(user_file);
+                    outfile << "Username: " << pw->pw_name << endl;
+                    outfile << "UID: " << pw->pw_uid << endl;
+                    outfile << "GID: " << pw->pw_gid << endl;
+                    outfile << "Home: " << pw->pw_dir << endl;
+                    outfile << "Shell: " << pw->pw_shell << endl;
+                }
+                endpwent();
+                cout << "Mounted users VFS at " << users_dir << endl;
+            } catch (const fs::filesystem_error& e) {
+                cerr << "Error: " << e.what() << endl;
             }
         }
     }
