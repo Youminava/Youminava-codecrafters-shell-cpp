@@ -34,6 +34,8 @@ test:
     - build
   script:
     - chmod +x kubsh
+    # Тесты находятся в /opt внутри образа. Копируем их в текущую папку.
+    - cp -r /opt/* .
     - pytest -v
 package:
   stage: package
