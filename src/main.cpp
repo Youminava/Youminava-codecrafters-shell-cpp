@@ -4,9 +4,18 @@
 #include <vector>
 #include <unistd.h>
 #include <sstream>
+#include <csignal>
 using namespace std;
 
+void handle_sighup(int sig) {
+    if (sig == SIGHUP) {
+        const char* msg = "Configuration reloaded\n";
+        write(STDOUT_FILENO, msg, 23);
+    }
+}
+
 int main() {
+    signal(SIGHUP, handle_sighup);
     cout << unitbuf;    
     string input;
    
