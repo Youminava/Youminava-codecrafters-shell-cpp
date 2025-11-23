@@ -66,7 +66,7 @@ void monitor_users() {
                 // Implementing full sync requires more state management.
             }
         } catch (...) {}
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
