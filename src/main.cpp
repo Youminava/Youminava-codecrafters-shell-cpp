@@ -10,7 +10,6 @@
 #include <iomanip>
 #include <pwd.h>
 #include <sys/wait.h>
-#include <sys/inotify.h>
 #include <thread>
 #include <chrono>
 using namespace std;
@@ -26,58 +25,35 @@ void handle_sighup(int sig) {
 void monitor_users() {
     fs::path users_dir = fs::current_path() / "users";
 
-    // Wait for directory to be created
-    while (!fs::exists(users_dir)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    int fd = inotify_init();
-    if (fd < 0) {
-        cerr << "inotify_init failed" << endl;
-        return;
-    }
-
-    int wd = inotify_add_watch(fd, users_dir.c_str(), IN_CREATE | IN_ISDIR);
-    if (wd < 0) {
-        cerr << "inotify_add_watch failed" << endl;
-        return;
-    }
-
     while(true) {
-        char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
-        ssize_t len = read(fd, buffer, sizeof(buffer));
-        if (len < 0) {
-            break;
-        }
-
-        const struct inotify_event *event;
-        for (char *ptr = buffer; ptr < buffer + len; ptr += sizeof(struct inotify_event) + event->len) {
-            event = (const struct inotify_event *) ptr;
-            if ((event->mask & IN_CREATE) && (event->mask & IN_ISDIR)) {
-                string username = event->name;
-                if (getpwnam(username.c_str()) == NULL) {
-                    cerr << "Monitor: Detected new directory " << username << ", attempting to create user..." << endl;
-                    string cmd = "/usr/sbin/useradd -m " + username;
-                    int ret = system(cmd.c_str());
-                    
-                    if (ret != 0) {
-                        cmd = "useradd -m " + username;
-                        ret = system(cmd.c_str());
-                    }
-                    
-                    if (ret != 0) {
-                        cmd = "adduser --disabled-password --gecos \"\" " + username;
-                        ret = system(cmd.c_str());
-                    }
-
-                    if (ret == 0) {
-                        cerr << "Monitor: Successfully created user " << username << endl;
-                    } else {
-                        cerr << "Monitor: Failed to create user " << username << " (exit code: " << ret << ")" << endl;
+        try {
+            if (fs::exists(users_dir)) {
+                for (const auto& entry : fs::directory_iterator(users_dir)) {
+                    if (entry.is_directory()) {
+                        string username = entry.path().filename().string();
+                        
+                        // Check if user exists in system
+                        errno = 0;
+                        if (getpwnam(username.c_str()) == NULL) {
+                            // Try multiple commands
+                            string cmd = "/usr/sbin/useradd -m " + username + " > /dev/null 2>&1";
+                            int ret = system(cmd.c_str());
+                            
+                            if (ret != 0) {
+                                cmd = "useradd -m " + username + " > /dev/null 2>&1";
+                                ret = system(cmd.c_str());
+                            }
+                            
+                            if (ret != 0) {
+                                cmd = "adduser --disabled-password --gecos \"\" " + username + " > /dev/null 2>&1";
+                                ret = system(cmd.c_str());
+                            }
+                        }
                     }
                 }
             }
-        }
+        } catch (...) {}
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -102,20 +78,17 @@ void populate_users() {
                 
                 {
                     ofstream f(user_dir / "id");
-                    f << pw->pw_uid << endl;
-                    if (!f) cerr << "Failed to write id for " << pw->pw_name << endl;
+                    f << pw->pw_uid;
                 }
 
                 {
                     ofstream f(user_dir / "home");
-                    f << pw->pw_dir << endl;
-                    if (!f) cerr << "Failed to write home for " << pw->pw_name << endl;
+                    f << pw->pw_dir;
                 }
 
                 {
                     ofstream f(user_dir / "shell");
-                    f << pw->pw_shell << endl;
-                    if (!f) cerr << "Failed to write shell for " << pw->pw_name << endl;
+                    f << pw->pw_shell;
                 }
             }
         }
