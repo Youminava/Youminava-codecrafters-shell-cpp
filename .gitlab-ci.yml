@@ -8,7 +8,9 @@ variables:
 
 build:
   stage: build
-  image: gcc:12
+  image:
+    name: gcc:12
+    pull_policy: if-not-present
   tags:
     - linux
   before_script:
@@ -27,7 +29,9 @@ build:
 
 test:
   stage: test
-  image: $TEST_IMAGE
+  image: 
+    name: $TEST_IMAGE
+    pull_policy: if-not-present
   tags:
     - linux
   dependencies:
@@ -56,7 +60,9 @@ test:
     - pytest -v
 package:
   stage: package
-  image: debian:stable-slim
+  image:
+    name: debian:stable-slim
+    pull_policy: if-not-present
   tags:
     - linux
   dependencies:
