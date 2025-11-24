@@ -1,7 +1,8 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -Werror
+LDFLAGS = -lfuse3
 
-SRC = src/main.cpp
+SRC = src/main.cpp src/vfs.cpp
 TARGET = kubsh
 
 PKG_DIR = kubsh-package
@@ -14,7 +15,9 @@ DEB_NAME = kubsh_1.0_amd64.deb
 build: $(TARGET)
 
 $(TARGET): $(SRC)
-	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)
+	$(CXX) -std=c++17 -Wall -Wextra src/main.cpp -c -o main.o
+	$(CXX) -std=c++17 -Wall -Wextra src/vfs.cpp -c -o vfs.o
+	$(CXX) main.o vfs.o -o $(TARGET) $(LDFLAGS)
 
 # 2) Запуск программы
 run: $(TARGET)

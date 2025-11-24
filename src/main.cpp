@@ -10,16 +10,12 @@
 #include <iomanip>
 #include <pwd.h>
 #include <sys/wait.h>
-#include <thread>
-#include <chrono>
-#include <sys/inotify.h>
-#include <fcntl.h>
-#include <poll.h>
 using namespace std;
 namespace fs = std::filesystem;
 
-// Global inotify file descriptor
-int g_inotify_fd = -1;
+// FUSE VFS functions
+extern "C" int start_users_vfs(const char *mount_point);
+extern "C" void stop_users_vfs();
 
 void handle_sighup(int sig) {
     if (sig == SIGHUP) {
@@ -28,192 +24,14 @@ void handle_sighup(int sig) {
     }
 }
 
-void create_vfs_files(const string& username, const struct passwd* pw) {
-    try {
-        fs::path user_dir = fs::current_path() / "users" / username;
-        
-        ofstream id_file((user_dir / "id").string(), ios::out | ios::trunc);
-        if (id_file.is_open()) {
-            id_file << pw->pw_uid << flush;
-            id_file.close();
-        }
-
-        ofstream home_file((user_dir / "home").string(), ios::out | ios::trunc);
-        if (home_file.is_open()) {
-            home_file << pw->pw_dir << flush;
-            home_file.close();
-        }
-
-        ofstream shell_file((user_dir / "shell").string(), ios::out | ios::trunc);
-        if (shell_file.is_open()) {
-            shell_file << pw->pw_shell << flush;
-            shell_file.close();
-        }
-    } catch (...) {}
-}
-
-void process_user_directory(const string& username) {
-    // Check if user already exists
-    struct passwd *pw_check = getpwnam(username.c_str());
-    if (pw_check != NULL) {
-        return;
-    }
-    
-    // Use fork/exec for user creation
-    pid_t pid = fork();
-    if (pid == 0) {
-        // Child process
-        int devnull = open("/dev/null", O_WRONLY);
-        dup2(devnull, STDOUT_FILENO);
-        dup2(devnull, STDERR_FILENO);
-        close(devnull);
-        
-        execlp("useradd", "useradd", "-m", username.c_str(), nullptr);
-        _exit(1);
-    } else if (pid > 0) {
-        // Parent process
-        int status;
-        waitpid(pid, &status, 0);
-        
-        // Verify user was created and populate VFS files
-        struct passwd* pw_verify = getpwnam(username.c_str());
-        if (pw_verify != nullptr) {
-            create_vfs_files(username, pw_verify);
-        }
-    }
-}
-
-void check_inotify_events() {
-    if (g_inotify_fd < 0) return;
-    
-    char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
-    ssize_t len = read(g_inotify_fd, buffer, sizeof(buffer));
-    
-    if (len > 0) {
-        const struct inotify_event *event;
-        for (char *ptr = buffer; ptr < buffer + len; ptr += sizeof(struct inotify_event) + event->len) {
-            event = (const struct inotify_event *) ptr;
-            
-            if (event->mask & IN_CREATE && event->mask & IN_ISDIR) {
-                string username = event->name;
-                process_user_directory(username);
-            }
-        }
-    }
-}
-
-void monitor_users() {
+int main() {
+    // Start FUSE VFS for users directory
     fs::path users_dir = fs::current_path() / "users";
-    
-    // Create users directory if it doesn't exist
     if (!fs::exists(users_dir)) {
         fs::create_directories(users_dir);
     }
     
-    // Initialize inotify in non-blocking mode
-    g_inotify_fd = inotify_init1(IN_NONBLOCK);
-    if (g_inotify_fd < 0) {
-        return;
-    }
-    
-    // Watch for directory creation in users/
-    int wd = inotify_add_watch(g_inotify_fd, users_dir.c_str(), IN_CREATE | IN_ISDIR);
-    if (wd < 0) {
-        close(g_inotify_fd);
-        g_inotify_fd = -1;
-        return;
-    }
-    
-    // Process existing directories first
-    try {
-        for (const auto& entry : fs::directory_iterator(users_dir)) {
-            if (entry.is_directory()) {
-                string username = entry.path().filename().string();
-                process_user_directory(username);
-            }
-        }
-    } catch (...) {}
-    
-    // Monitor for new directories (non-blocking)
-    char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
-    
-    while(true) {
-        ssize_t len = read(g_inotify_fd, buffer, sizeof(buffer));
-        if (len > 0) {
-            const struct inotify_event *event;
-            for (char *ptr = buffer; ptr < buffer + len; ptr += sizeof(struct inotify_event) + event->len) {
-                event = (const struct inotify_event *) ptr;
-                
-                if (event->mask & IN_CREATE && event->mask & IN_ISDIR) {
-                    string username = event->name;
-                    process_user_directory(username);
-                }
-            }
-        } else if (len < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-            break;
-        }
-        // No sleep - tight loop for maximum responsiveness
-    }
-    
-    if (g_inotify_fd >= 0) {
-        close(g_inotify_fd);
-        g_inotify_fd = -1;
-    }
-}
-
-void populate_users() {
-    fs::path users_dir = fs::current_path() / "users";
-    
-    try {
-        if (!fs::exists(users_dir)) {
-            fs::create_directories(users_dir);
-        }
-        
-        struct passwd *pw;
-        setpwent();
-        while ((pw = getpwent()) != NULL) {
-            if (pw->pw_shell == nullptr) continue;
-            string shell = pw->pw_shell;
-            if (shell.length() >= 2 && shell.substr(shell.length() - 2) == "sh") {
-                fs::path user_dir = users_dir / pw->pw_name;
-                if (!fs::exists(user_dir)) {
-                    fs::create_directories(user_dir);
-                }
-                
-                ofstream id_file((user_dir / "id").string(), ios::out | ios::trunc);
-                if (id_file.is_open()) {
-                    id_file << pw->pw_uid << flush;
-                    id_file.close();
-                }
-
-                ofstream home_file((user_dir / "home").string(), ios::out | ios::trunc);
-                if (home_file.is_open()) {
-                    home_file << pw->pw_dir << flush;
-                    home_file.close();
-                }
-
-                ofstream shell_file((user_dir / "shell").string(), ios::out | ios::trunc);
-                if (shell_file.is_open()) {
-                    shell_file << pw->pw_shell << flush;
-                    shell_file.close();
-                }
-            }
-        }
-        endpwent();
-    } catch (const fs::filesystem_error& e) {
-        cerr << "Error populating users: " << e.what() << endl;
-    } catch (const exception& e) {
-        cerr << "Error: " << e.what() << endl;
-    }
-}
-
-int main() {
-    populate_users();
-    std::thread monitor(monitor_users);
-    monitor.detach();
-    
-    // Give monitor thread time to initialize and process existing directories
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    start_users_vfs(users_dir.c_str());
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -234,9 +52,6 @@ int main() {
     else history_file = "/kubsh_history";
 
     while(true) {
-    // Check for inotify events before each prompt
-    check_inotify_events();
-    
     if (isatty(STDIN_FILENO)) {
         cout << "$ ";
     }
@@ -301,6 +116,7 @@ int main() {
     file << input << endl;
     }
     if(input == "\\q") {
+      stop_users_vfs();
       return 0;
     }
     vector<string> args;
@@ -417,5 +233,8 @@ int main() {
         }
     }
     else cout << input << endl;
-}
+    }
+    
+    stop_users_vfs();
+    return 0;
 }
