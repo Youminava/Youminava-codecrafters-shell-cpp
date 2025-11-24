@@ -8,7 +8,9 @@ variables:
 
 build:
   stage: build
-  image: gcc:12
+  image:
+    name: gcc:12
+    pull_policy: if-not-present
   tags:
     - linux
   before_script:
