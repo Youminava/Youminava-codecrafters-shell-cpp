@@ -27,7 +27,9 @@ build:
 
 test:
   stage: test
-  image: $TEST_IMAGE
+  image:
+    name: $TEST_IMAGE
+    pull_policy: if-not-present
   tags:
     - linux
   dependencies:
