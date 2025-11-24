@@ -12,7 +12,7 @@ build:
   tags:
     - linux
   before_script:
-    - apt-get update && apt-get install -y make
+    - apt-get update && apt-get install -y make libfuse3-dev pkg-config
   script:
     - pwd
     - ls -la
@@ -30,8 +30,21 @@ test:
   image: $TEST_IMAGE
   tags:
     - linux
+  # Request privileged mode for the job so /dev/fuse can be exposed to the container.
+  # Note: the GitLab Runner must allow privileged containers (see GITLAB_RUNNER_SETUP.md).
+  privileged: true
   dependencies:
     - build
+  before_script:
+    # Check FUSE availability
+    - |
+      if [ -c /dev/fuse ]; then
+        echo "✓ FUSE device available - all tests will run"
+      else
+        echo "✗ FUSE device NOT available - VFS tests will fail"
+        echo "To enable FUSE: configure GitLab Runner with 'privileged = true'"
+        echo "See GITLAB_RUNNER_SETUP.md for instructions"
+      fi
   script:
     - chmod +x kubsh
     # Тесты находятся в /opt внутри образа. Копируем их в текущую папку.
