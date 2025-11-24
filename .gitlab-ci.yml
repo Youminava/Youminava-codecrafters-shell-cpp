@@ -74,6 +74,8 @@ package:
     - mkdir -p kubsh-package/usr/bin
     - cp kubsh kubsh-package/usr/bin/
     - chmod 755 kubsh-package/usr/bin/kubsh
+    # Fix DEBIAN directory permissions (must be between 0755 and 0775)
+    - chmod 755 kubsh-package/DEBIAN
     - dpkg-deb --build kubsh-package kubsh_1.0_amd64.deb
   artifacts:
     paths:
