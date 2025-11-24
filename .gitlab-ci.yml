@@ -9,12 +9,13 @@ variables:
 build:
   stage: build
   image:
-    name: gcc:12
+    name: $TEST_IMAGE
     pull_policy: if-not-present
   tags:
     - linux
   before_script:
-    - apt-get update && apt-get install -y make libfuse3-dev pkg-config
+    # tyvik/kubsh_test has make, gcc, libfuse3-dev. Need to add g++ for C++
+    - apt-get update && apt-get install -y g++
   script:
     - pwd
     - ls -la
