@@ -12,7 +12,7 @@ build:
   tags:
     - linux
   before_script:
-    - apt-get update && apt-get install -y make libfuse3-dev pkg-config
+    - apt-get update && apt-get install -y make
   script:
     - pwd
     - ls -la
@@ -32,14 +32,6 @@ test:
     - linux
   dependencies:
     - build
-  variables:
-    DOCKER_DRIVER: overlay2
-  # Включаем privileged режим для поддержки FUSE
-  services:
-    - docker:dind
-  before_script:
-    # Проверяем и загружаем модуль FUSE
-    - modprobe fuse || echo "FUSE module already loaded or not available"
   script:
     - chmod +x kubsh
     # Тесты находятся в /opt внутри образа. Копируем их в текущую папку.

@@ -14,9 +14,15 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-// FUSE VFS functions
+// FUSE VFS functions (conditionally compiled)
+#ifdef ENABLE_FUSE
 extern "C" int start_users_vfs(const char *mount_point);
 extern "C" void stop_users_vfs();
+#else
+// Stub functions when FUSE is disabled
+inline int start_users_vfs(const char*) { return -1; }
+inline void stop_users_vfs() {}
+#endif
 
 void handle_sighup(int sig) {
     if (sig == SIGHUP) {
@@ -26,15 +32,17 @@ void handle_sighup(int sig) {
 }
 
 int main() {
-    // Initialize FUSE VFS for users directory
+    // Initialize FUSE VFS for users directory (if available)
     fs::path users_dir = fs::current_path() / "users";
     try {
         if (!fs::exists(users_dir)) {
             fs::create_directories(users_dir);
         }
-    } catch (...) {}
-    
-    start_users_vfs(users_dir.string().c_str());
+        // Try to start VFS, but continue if it fails
+        start_users_vfs(users_dir.string().c_str());
+    } catch (...) {
+        // VFS initialization failed, continue without it
+    }
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
