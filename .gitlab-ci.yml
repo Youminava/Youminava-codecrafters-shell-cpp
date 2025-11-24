@@ -58,7 +58,9 @@ test:
     - pytest -v
 package:
   stage: package
-  image: debian:stable-slim
+  image:
+    name: debian:stable-slim
+    pull_policy: if-not-present
   tags:
     - linux
   dependencies:
