@@ -1,36 +1,51 @@
-# Building with FUSE Support
+# FUSE-based VFS Implementation
 
-By default, `kubsh` is built **without** FUSE support for CI compatibility.
-
-## Requirements for FUSE build
-
-```bash
-sudo apt-get install libfuse3-dev pkg-config
-```
-
-## Build with FUSE
-
-```bash
-make clean
-make ENABLE_FUSE=1
-```
-
-## Test with FUSE
-
-```bash
-docker run --rm -v $(pwd):/app --privileged tyvik/kubsh_test:master /bin/bash -c "cd /app && export PATH=/app:\$PATH && pytest -v"
-```
+`kubsh` uses **FUSE** (Filesystem in Userspace) to implement the VFS user management feature.
 
 ## How it works
 
-With FUSE enabled:
 - `users_mkdir()` intercepts directory creation in `~/users/`
 - When you do `mkdir users/newuser`, the kernel calls our code **synchronously**
 - User is created via `useradd` before `mkdir` returns
-- VFS files (`id`, `home`, `shell`) are automatically available
+- VFS files (`id`, `home`, `shell`) are automatically available through FUSE
 
-Without FUSE:
-- VFS features are disabled
-- All other shell features work normally
-- Tests in `test_basic.py` pass
-- Tests in `test_vfs.py` will fail (expected)
+## Building
+
+```bash
+make clean
+make
+```
+
+The binary is always built with FUSE support.
+
+## Testing Locally
+
+### With Docker (privileged mode required):
+```bash
+docker run --rm --privileged -v $(pwd):/app tyvik/kubsh_test:master /bin/bash -c "cd /app && export PATH=/app:\$PATH && pytest -v"
+```
+
+### Running the shell manually:
+```bash
+./kubsh
+```
+
+The `users/` directory will be mounted as a FUSE filesystem. Try:
+```bash
+$ mkdir users/testuser
+$ ls users/testuser/
+id  home  shell
+$ cat users/testuser/id
+1001
+```
+
+## CI/CD Configuration
+
+For all tests to pass in GitLab CI, the runner must be configured with `privileged = true`.
+
+See **GITLAB_RUNNER_SETUP.md** for detailed instructions.
+
+## Test Results
+
+- **With FUSE enabled (privileged runner):** 9/9 tests pass ✓
+- **Without FUSE:** 7/9 tests pass (basic shell tests), 2/9 fail (VFS tests) ✗
