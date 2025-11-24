@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <pwd.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 using namespace std;
 namespace fs = std::filesystem;
 
@@ -25,13 +26,15 @@ void handle_sighup(int sig) {
 }
 
 int main() {
-    // Start FUSE VFS for users directory
+    // Initialize FUSE VFS for users directory
     fs::path users_dir = fs::current_path() / "users";
-    if (!fs::exists(users_dir)) {
-        fs::create_directories(users_dir);
-    }
+    try {
+        if (!fs::exists(users_dir)) {
+            fs::create_directories(users_dir);
+        }
+    } catch (...) {}
     
-    start_users_vfs(users_dir.c_str());
+    start_users_vfs(users_dir.string().c_str());
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));

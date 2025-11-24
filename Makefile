@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -Werror
-LDFLAGS = -lfuse3
+LDFLAGS =
 
 SRC = src/main.cpp src/vfs.cpp
 TARGET = kubsh
@@ -15,9 +15,7 @@ DEB_NAME = kubsh_1.0_amd64.deb
 build: $(TARGET)
 
 $(TARGET): $(SRC)
-	$(CXX) -std=c++17 -Wall -Wextra src/main.cpp -c -o main.o
-	$(CXX) -std=c++17 -Wall -Wextra src/vfs.cpp -c -o vfs.o
-	$(CXX) main.o vfs.o -o $(TARGET) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET) -lfuse3 $(LDFLAGS)
 
 # 2) Запуск программы
 run: $(TARGET)
