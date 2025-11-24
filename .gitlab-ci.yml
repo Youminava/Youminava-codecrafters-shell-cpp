@@ -30,11 +30,12 @@ test:
   image: $TEST_IMAGE
   tags:
     - linux
-  # Request privileged mode for the job so /dev/fuse can be exposed to the container.
-  # Note: the GitLab Runner must allow privileged containers (see GITLAB_RUNNER_SETUP.md).
-  privileged: true
   dependencies:
     - build
+  # NOTE: To pass VFS tests, the GitLab Runner must be configured with 'privileged = true'
+  # in /etc/gitlab-runner/config.toml under [runners.docker] section.
+  # See GITLAB_RUNNER_SETUP.md for step-by-step instructions.
+  # Without privileged mode, /dev/fuse won't be available and 2 tests will fail.
   before_script:
     # Check FUSE availability
     - |
