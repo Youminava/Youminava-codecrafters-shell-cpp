@@ -1,17 +1,8 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -Werror
-LDFLAGS =
+LDFLAGS = -lfuse3
 
-# FUSE support (disabled by default for CI compatibility)
-# To enable: make ENABLE_FUSE=1
-ifdef ENABLE_FUSE
-	CXXFLAGS += -DENABLE_FUSE
-	LDFLAGS += -lfuse3
-	SRC = src/main.cpp src/vfs.cpp
-else
-	SRC = src/main.cpp
-endif
-
+SRC = src/main.cpp src/vfs.cpp
 TARGET = kubsh
 
 PKG_DIR = kubsh-package
