@@ -261,11 +261,59 @@ static int users_mkdir(const char *path, mode_t mode) {
     return -EIO;
 }
 
+static int users_rmdir(const char *path) {
+    std::string pathstr = path;
+    if (pathstr[0] == '/') pathstr = pathstr.substr(1);
+    
+    // Should be /username only (no nested paths)
+    if (pathstr.find('/') != std::string::npos) {
+        return -EACCES;
+    }
+    
+    std::string username = pathstr;
+    
+    // Check if user exists
+    struct passwd *pw = getpwnam(username.c_str());
+    if (pw == NULL) {
+        return -ENOENT;  // User doesn't exist
+    }
+    
+    // Delete user synchronously
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) {
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            close(devnull);
+        }
+        
+        execlp("userdel", "userdel", "-r", username.c_str(), (char*)NULL);
+        _exit(1);
+    } else if (pid > 0) {
+        // Parent: wait for completion
+        int status;
+        waitpid(pid, &status, 0);
+        
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            // Success - update cache
+            update_users_cache();
+            return 0;
+        }
+        
+        return -EIO;
+    }
+    
+    return -EIO;
+}
+
 static struct fuse_operations users_oper{};
 
 void init_fuse_operations() {
     users_oper.getattr = users_getattr;
     users_oper.mkdir = users_mkdir;
+    users_oper.rmdir = users_rmdir;
     users_oper.open = users_open;
     users_oper.read = users_read;
     users_oper.readdir = users_readdir;
