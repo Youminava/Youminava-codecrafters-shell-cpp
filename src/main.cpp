@@ -85,10 +85,8 @@ int main() {
       string cmdName = args[0];
 
       bool isBuiltin = false;
-      if(cmdName == "\\q" || cmdName == "history" || cmdName == "help" || 
-         cmdName == "exit" || cmdName == "type" || cmdName == "pwd" || 
-         cmdName == "cd" || cmdName == "echo" || cmdName == "debug" || cmdName == "\\e" ||
-         cmdName == "\\l" || cmdName == "\\mount_users") {
+      if(cmdName == "\\q" || cmdName == "history" || cmdName == "echo" || 
+         cmdName == "\\e" || cmdName == "\\l") {
         isBuiltin = true;
       }
 
@@ -139,7 +137,7 @@ int main() {
     }
     if(!current_arg.empty()) args.push_back(current_arg);
 
-    if(!args.empty() && (args[0] == "echo" || args[0] == "debug")) {
+    if(!args.empty() && args[0] == "echo") {
         for(size_t i = 1; i < args.size(); ++i) {
             cout << args[i] << (i == args.size() - 1 ? "" : " ");
         }
@@ -197,34 +195,6 @@ int main() {
                         }
                     }
                 }
-            }
-        }
-    }
-    else if(!args.empty() && args[0] == "\\mount_users") {
-        const char* home = getenv("HOME");
-        if (!home) {
-            cerr << "HOME not set" << endl;
-        } else {
-            fs::path users_dir = fs::path(home) / "users";
-            try {
-                if (!fs::exists(users_dir)) {
-                    fs::create_directory(users_dir);
-                }
-                struct passwd *pw;
-                setpwent();
-                while ((pw = getpwent()) != NULL) {
-                    fs::path user_file = users_dir / pw->pw_name;
-                    ofstream outfile(user_file);
-                    outfile << "Username: " << pw->pw_name << endl;
-                    outfile << "UID: " << pw->pw_uid << endl;
-                    outfile << "GID: " << pw->pw_gid << endl;
-                    outfile << "Home: " << pw->pw_dir << endl;
-                    outfile << "Shell: " << pw->pw_shell << endl;
-                }
-                endpwent();
-                cout << "Mounted users VFS at " << users_dir << endl;
-            } catch (const fs::filesystem_error& e) {
-                cerr << "Error: " << e.what() << endl;
             }
         }
     }
