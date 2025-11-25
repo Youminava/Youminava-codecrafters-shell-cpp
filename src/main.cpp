@@ -86,7 +86,7 @@ int main() {
 
       bool isBuiltin = false;
       if(cmdName == "\\q" || cmdName == "history" || cmdName == "echo" || 
-         cmdName == "\\e" || cmdName == "\\l") {
+         cmdName == "debug" || cmdName == "\\e" || cmdName == "\\l") {
         isBuiltin = true;
       }
 
@@ -137,7 +137,7 @@ int main() {
     }
     if(!current_arg.empty()) args.push_back(current_arg);
 
-    if(!args.empty() && args[0] == "echo") {
+    if(!args.empty() && (args[0] == "echo" || args[0] == "debug")) {
         for(size_t i = 1; i < args.size(); ++i) {
             cout << args[i] << (i == args.size() - 1 ? "" : " ");
         }
