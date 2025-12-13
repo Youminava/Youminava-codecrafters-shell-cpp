@@ -7,7 +7,7 @@ TARGET = kubsh
 
 PKG_DIR = kubsh-package
 PKG_BIN = $(PKG_DIR)/usr/bin
-DEB_NAME = kubsh_1.0_amd64.deb
+DEB_NAME = kubsh.deb
 
 .PHONY: build run deb clean
 
