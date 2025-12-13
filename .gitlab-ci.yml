@@ -1,6 +1,69 @@
 stages:
   - build
   - test
+
+variables:
+  CI_IMAGE: "bebra11111111/my-shell-app:latest"
+
+# Build stage: run the container-provided check.sh to build the .deb artifact
+build:
+  stage: build
+  image:
+    name: $CI_IMAGE
+    pull_policy: if-not-present
+  tags:
+    - linux
+  script:
+    - pwd
+    - ls -la
+    - echo "Looking for check.sh to build package..."
+    # prefer repository-local check.sh if present (copied from /opt by container image), otherwise try /opt/check.sh
+    - if [ -x ./check.sh ]; then ./check.sh; elif [ -x /opt/check.sh ]; then /opt/check.sh; else echo "check.sh not found"; exit 1; fi
+    - echo "Build finished, listing artifacts:" || true
+    - ls -la || true
+  artifacts:
+    paths:
+      - kubsh_1.0_amd64.deb
+    expire_in: 1 hour
+
+# Test stage: copy tests from image (usually in /opt) and run them.
+test:
+  stage: test
+  image:
+    name: $CI_IMAGE
+    pull_policy: if-not-present
+  tags:
+    - linux
+  dependencies:
+    - build
+  before_script:
+    # If /dev/fuse is present we'll try to run VFS tests; runner must be configured privileged
+    - |
+      if [ -c /dev/fuse ]; then
+        echo "✓ FUSE device available - VFS tests can run"
+      else
+        echo "✗ FUSE device NOT available - VFS tests will fail unless runner is privileged"
+      fi
+  script:
+    - echo "Preparing tests"
+    # Ensure the deb is present (from build). If kubsh binary is available in the repo, make it executable.
+    - if [ -f kubsh_1.0_amd64.deb ]; then echo "deb artifact found"; fi || true
+    - if [ -f kubsh ]; then chmod +x kubsh || true; fi || true
+    # Copy tests that may be embedded in the image at /opt into the workspace (common pattern)
+    - cp -r /opt/* . || true
+    # Add current directory to PATH so tests can find kubsh
+    - export PATH=$PATH:$(pwd)
+    - ls -la
+    - echo "Running tests..."
+    - pytest -v
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+    expire_in: 1 week
+stages:
+  - build
+  - test
   - package
 
 variables:
