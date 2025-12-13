@@ -3,7 +3,8 @@ Version: 1.1
 Section: utils
 Priority: optional
 Architecture: amd64
-Maintainer: Youminava stray228.111@rambler.ru
+Depends: libc6 (>= 2.31), libfuse3-3, libstdc++6, fuse3
+Maintainer: Youminava <stray228.111@rambler.ru>
 Description: My custom shell (kubsh)
  A simple custom Linux shell written in C++.
  This is version 1.1 built for the deb package.
