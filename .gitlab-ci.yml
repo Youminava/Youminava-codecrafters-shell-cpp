@@ -1,26 +1,8 @@
 stages:
-  - build
   - test
 
 variables:
   CI_IMAGE: "bebra11111111/my-shell-app:latest"
-
-build:
-  stage: build
-  image:
-    name: $CI_IMAGE
-    pull_policy: if-not-present
-  tags:
-    - linux
-  script:
-    - pwd
-    - ls -la
-    - if [ -x ./check.sh ]; then ./check.sh; elif [ -x /opt/check.sh ]; then /opt/check.sh; else echo "check.sh not found"; exit 1; fi
-    - ls -la
-  artifacts:
-    paths:
-      - kubsh_1.0_amd64.deb
-    expire_in: 1 hour
 
 test:
   stage: test
@@ -29,10 +11,13 @@ test:
     pull_policy: if-not-present
   tags:
     - linux
-  dependencies:
-    - build
   script:
-    - cp -r /opt/* . || true
-    - export PATH=$PATH:$(pwd)
+    - echo "=== Building ==="
+    - make deb
     - ls -la
+    - echo "=== Installing package ==="
+    - dpkg -i kubsh_1.0_amd64.deb
+    - which kubsh
+    - echo "=== Running tests ==="
+    - cp -r /opt/* . || true
     - pytest -v
