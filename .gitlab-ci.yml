@@ -1,199 +1,38 @@
-stages:stages:
-
-  - build  - build
-
-  - test  - test
-
-
-
-variables:variables:
-
-  CI_IMAGE: "bebra11111111/my-shell-app:latest"  CI_IMAGE: "bebra11111111/my-shell-app:latest"
-
-
-
-# Stage 1: Build - run check.sh to build .deb package# Build stage: run the container-provided check.sh to build the .deb artifact
-
-build:build:
-
-  stage: build  stage: build
-
-  image:  image:
-
-    name: $CI_IMAGE    name: $CI_IMAGE
-
-    pull_policy: if-not-present    pull_policy: if-not-present
-
-  tags:  tags:
-
-    - linux    - linux
-
-  script:  script:
-
-    - pwd    - pwd
-
-    - ls -la    - ls -la
-
-    - echo "Looking for check.sh to build package..."    - echo "Looking for check.sh to build package..."
-
-    - if [ -x ./check.sh ]; then ./check.sh; elif [ -x /opt/check.sh ]; then /opt/check.sh; else echo "check.sh not found"; exit 1; fi    # prefer repository-local check.sh if present (copied from /opt by container image), otherwise try /opt/check.sh
-
-    - echo "Build finished, listing artifacts:"    - if [ -x ./check.sh ]; then ./check.sh; elif [ -x /opt/check.sh ]; then /opt/check.sh; else echo "check.sh not found"; exit 1; fi
-
-    - ls -la    - echo "Build finished, listing artifacts:" || true
-
-  artifacts:    - ls -la || true
-
-    paths:  artifacts:
-
-      - kubsh_1.0_amd64.deb    paths:
-
-    expire_in: 1 hour      - kubsh_1.0_amd64.deb
-
-    expire_in: 1 hour
-
-# Stage 2: Test - run pytest tests
-
-test:# Test stage: copy tests from image (usually in /opt) and run them.
-
-  stage: testtest:
-
-  image:  stage: test
-
-    name: $CI_IMAGE  image:
-
-    pull_policy: if-not-present    name: $CI_IMAGE
-
-  tags:    pull_policy: if-not-present
-
-    - linux  tags:
-
-  dependencies:    - linux
-
-    - build  dependencies:
-
-  before_script:    - build
-
-    - |  before_script:
-
-      if [ -c /dev/fuse ]; then    # If /dev/fuse is present we'll try to run VFS tests; runner must be configured privileged
-
-        echo "FUSE device available - VFS tests can run"    - |
-
-      else      if [ -c /dev/fuse ]; then
-
-        echo "FUSE device NOT available - VFS tests will fail unless runner is privileged"        echo "✓ FUSE device available - VFS tests can run"
-
-      fi      else
-
-  script:        echo "✗ FUSE device NOT available - VFS tests will fail unless runner is privileged"
-
-    - echo "Preparing tests"      fi
-
-    - if [ -f kubsh_1.0_amd64.deb ]; then echo "deb artifact found"; fi  script:
-
-    - if [ -f kubsh ]; then chmod +x kubsh; fi    - echo "Preparing tests"
-
-    - cp -r /opt/* . || true    # Ensure the deb is present (from build). If kubsh binary is available in the repo, make it executable.
-
-    - export PATH=$PATH:$(pwd)    - if [ -f kubsh_1.0_amd64.deb ]; then echo "deb artifact found"; fi || true
-
-    - ls -la    - if [ -f kubsh ]; then chmod +x kubsh || true; fi || true
-
-    - echo "Running tests..."    # Copy tests that may be embedded in the image at /opt into the workspace (common pattern)
-
-    - pytest -v    - cp -r /opt/* . || true
-
-    # Add current directory to PATH so tests can find kubsh
-    - export PATH=$PATH:$(pwd)
-    - ls -la
-    - echo "Running tests..."
-    - pytest -v
-  artifacts:
-    when: always
-    reports:
-      junit: junit.xml
-    expire_in: 1 week
 stages:
   - build
   - test
-  - package
 
 variables:
-  TEST_IMAGE: "tyvik/kubsh_test:master"
+  CI_IMAGE: "bebra11111111/my-shell-app:latest"
 
 build:
   stage: build
   image:
-    name: $TEST_IMAGE
+    name: $CI_IMAGE
     pull_policy: if-not-present
   tags:
     - linux
-  before_script:
-    # tyvik/kubsh_test has make, gcc, libfuse3-dev. Need to add g++ for C++
-    - apt-get update && apt-get install -y g++
   script:
     - pwd
     - ls -la
-    - echo "--- Makefile ---"
-    - sed -n '1,200p' Makefile || true
-    - make -n build || true
-    - make build
+    - if [ -x ./check.sh ]; then ./check.sh; elif [ -x /opt/check.sh ]; then /opt/check.sh; else echo "check.sh not found"; exit 1; fi
+    - ls -la
   artifacts:
     paths:
-      - kubsh
+      - kubsh_1.0_amd64.deb
     expire_in: 1 hour
 
 test:
   stage: test
   image:
-    name: $TEST_IMAGE
+    name: $CI_IMAGE
     pull_policy: if-not-present
   tags:
     - linux
   dependencies:
     - build
-  # NOTE: To pass VFS tests, the GitLab Runner must be configured with 'privileged = true'
-  # in /etc/gitlab-runner/config.toml under [runners.docker] section.
-  # See GITLAB_RUNNER_SETUP.md for step-by-step instructions.
-  # Without privileged mode, /dev/fuse won't be available and 2 tests will fail.
-  before_script:
-    # Check FUSE availability
-    - |
-      if [ -c /dev/fuse ]; then
-        echo "✓ FUSE device available - all tests will run"
-      else
-        echo "✗ FUSE device NOT available - VFS tests will fail"
-        echo "To enable FUSE: configure GitLab Runner with 'privileged = true'"
-        echo "See GITLAB_RUNNER_SETUP.md for instructions"
-      fi
   script:
-    - chmod +x kubsh
-    # Тесты находятся в /opt внутри образа. Копируем их в текущую папку.
-    - cp -r /opt/* .
-    # Добавляем текущую директорию в PATH, чтобы тесты нашли kubsh
+    - cp -r /opt/* . || true
     - export PATH=$PATH:$(pwd)
     - ls -la
     - pytest -v
-package:
-  stage: package
-  image:
-    name: debian:stable-slim
-    pull_policy: if-not-present
-  tags:
-    - linux
-  dependencies:
-    - build
-  before_script:
-    - apt-get update && apt-get install -y dpkg-dev fakeroot
-  script:
-    - mkdir -p kubsh-package/usr/bin
-    - cp kubsh kubsh-package/usr/bin/
-    - chmod 755 kubsh-package/usr/bin/kubsh
-    # Fix DEBIAN directory permissions (must be between 0755 and 0775)
-    - chmod 755 kubsh-package/DEBIAN
-    - dpkg-deb --build kubsh-package kubsh_1.0_amd64.deb
-  artifacts:
-    paths:
-      - kubsh_1.0_amd64.deb
-    expire_in: 1 week
