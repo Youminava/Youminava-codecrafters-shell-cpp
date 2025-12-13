@@ -16,8 +16,7 @@ test:
     - make deb
     - ls -la
     - echo "=== Installing package ==="
-    - dpkg -i kubsh_1.0_amd64.deb
+    - apt update && apt install -y ./kubsh_1.0_amd64.deb
     - which kubsh
     - echo "=== Running tests ==="
-    - cp -r /opt/* . || true
-    - pytest -v
+    - cd /opt && pytest -v --log-cli-level=10 .
