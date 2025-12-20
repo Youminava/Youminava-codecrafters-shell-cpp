@@ -5,11 +5,9 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: Build and test inside CI image
+  build:
+    name: Build .deb (in container)
     runs-on: ubuntu-latest
-
-    # Запуск job внутри образа (указываем строкой, без выражений)
     container:
       image: bebra11111111/my-shell-app:latest
 
@@ -17,8 +15,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy repo to /mnt
-        run: cp -r . /mnt/
+      - name: Build .deb
+        run: |
+          # copy repo to /mnt and build inside the container image
+          cp -r . /mnt/
+          cd /mnt
+          make deb
+
+      - name: Upload kubsh.deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubsh-deb
+          path: /mnt/kubsh.deb
+
+  test:
+    name: Run tests (self-hosted runner required)
+    needs: build
+    # this job must run on a self-hosted runner which has Docker and allows privileged containers
+    runs-on: [self-hosted, linux]
+
+    steps:
+      - name: Checkout (for workspace)
+        uses: actions/checkout@v4
+
+      - name: Download kubsh.deb artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kubsh-deb
+          path: ./artifact
+
+      - name: Run tests in privileged container
+        run: |
+          # The self-hosted runner must have Docker and permit privileged containers.
+          # This will run the same check script that builds, installs and runs pytest inside the image.
+          docker run --rm --privileged -v "${{ github.workspace }}:/mnt" -w /mnt bebra11111111/my-shell-app:latest bash -lc "/opt/check.sh"
 
       - name: Run check.sh
         run: /opt/check.sh
