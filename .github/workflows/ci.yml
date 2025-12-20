@@ -1,21 +1,38 @@
-stages:
-  - test
+name: CI
 
-variables:
-  CI_IMAGE: "bebra11111111/my-shell-app:latest"
+on:
+  push:
+  pull_request:
 
-test:
-  stage: test
-  image:
-    name: $CI_IMAGE
-    pull_policy: if-not-present
-  tags:
-    - linux
-  script:
-    - cp -r . /mnt/
-    - /opt/check.sh
-    - cp /mnt/kubsh.deb .
-  artifacts:
-    paths:
-      - kubsh.deb
-    expire_in: 1 week
+env:
+  CI_IMAGE: bebra11111111/my-shell-app:latest
+
+jobs:
+  test:
+    name: Build .deb and run tests
+    runs-on: ubuntu-latest
+
+    # Вы можете запустить шаги внутри контейнера (но см. предупреждение про привилегии ниже)
+    container:
+      image: ${{ env.CI_IMAGE }}
+      # pull: true   # опционально, аналог pull_policy
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Prepare workspace (copy repo to /mnt)
+        run: |
+          cp -r . /mnt/
+
+      - name: Run check.sh (build & tests inside image)
+        run: |
+          /opt/check.sh
+        # Если скрипт использует sudo или требует специальных прав, может потребоваться self-hosted runner.
+
+      - name: Upload kubsh.deb artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubsh-deb
+          path: kubsh.deb

@@ -13,7 +13,6 @@
 #include <fcntl.h>
 using namespace std;
 namespace fs = std::filesystem;
-
 // FUSE VFS functions
 extern "C" int start_users_vfs(const char *mount_point);
 extern "C" void stop_users_vfs();
