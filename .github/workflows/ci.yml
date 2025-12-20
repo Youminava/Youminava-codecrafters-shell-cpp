@@ -4,34 +4,26 @@ on:
   push:
   pull_request:
 
-env:
-  CI_IMAGE: bebra11111111/my-shell-app:latest
-
 jobs:
   test:
-    name: Build .deb and run tests
+    name: Build and test inside CI image
     runs-on: ubuntu-latest
 
-    # Вы можете запустить шаги внутри контейнера (но см. предупреждение про привилегии ниже)
+    # Запуск job внутри образа (указываем строкой, без выражений)
     container:
-      image: ${{ env.CI_IMAGE }}
-      # pull: true   # опционально, аналог pull_policy
+      image: bebra11111111/my-shell-app:latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare workspace (copy repo to /mnt)
-        run: |
-          cp -r . /mnt/
+      - name: Copy repo to /mnt
+        run: cp -r . /mnt/
 
-      - name: Run check.sh (build & tests inside image)
-        run: |
-          /opt/check.sh
-        # Если скрипт использует sudo или требует специальных прав, может потребоваться self-hosted runner.
+      - name: Run check.sh
+        run: /opt/check.sh
 
-      - name: Upload kubsh.deb artifact
-        if: always()
+      - name: Upload kubsh.deb
         uses: actions/upload-artifact@v4
         with:
           name: kubsh-deb
