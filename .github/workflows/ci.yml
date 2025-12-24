@@ -31,7 +31,6 @@ jobs:
   test:
     name: Run tests (self-hosted runner required)
     needs: build
-    # this job must run on a self-hosted runner which has Docker and allows privileged containers
     runs-on: [self-hosted, linux]
 
     steps:
@@ -46,9 +45,12 @@ jobs:
 
       - name: Run tests in privileged container
         run: |
-          # The self-hosted runner must have Docker and permit privileged containers.
-          # This will run the same check script that builds, installs and runs pytest inside the image.
-          docker run --rm --privileged -v "${{ github.workspace }}:/mnt" -w /mnt bebra11111111/my-shell-app:latest bash -lc "/opt/check.sh"
+          # Copy the downloaded kubsh.deb into the container and install it
+          docker run --rm --privileged -v "${{ github.workspace }}:/mnt" -v "${{ github.workspace }}/artifact:/artifact" bebra11111111/my-shell-app:latest bash -lc "
+            apt update && apt install -y /artifact/kubsh.deb && \
+            cd /opt && \
+            pytest -v
+          "
 
       - name: Run check.sh
         run: /opt/check.sh
