@@ -5,51 +5,20 @@ on:
   pull_request:
 
 jobs:
-  build:
-    name: Build .deb (in container)
-    runs-on: ubuntu-latest
-    container:
-      image: bebra11111111/my-shell-app:latest
+  test:
+    name: Build and test (privileged container)
+    runs-on: [self-hosted, linux]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build .deb
+      - name: Run check.sh in privileged container
         run: |
-          # copy repo to /mnt and build inside the container image
-          cp -r . /mnt/
-          cd /mnt
-          make deb
-
-      - name: Upload kubsh.deb
-        uses: actions/upload-artifact@v4
-        with:
-          name: kubsh-deb
-          path: /mnt/kubsh.deb
-
-  test:
-    name: Run tests (self-hosted runner required)
-    needs: build
-    runs-on: [self-hosted, linux]
-
-    steps:
-      - name: Checkout (for workspace)
-        uses: actions/checkout@v4
-
-      - name: Download kubsh.deb artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: kubsh-deb
-          path: ./artifact
-
-      - name: Run tests in privileged container
-        run: |
-          # Copy the downloaded kubsh.deb into the container and install it
-          docker run --rm --privileged -v "${{ github.workspace }}:/mnt" -v "${{ github.workspace }}/artifact:/artifact" bebra11111111/my-shell-app:latest bash -lc "
-            apt update && apt install -y /artifact/kubsh.deb && \
-            cd /opt && \
-            pytest -v
+          # Copy repo to /mnt inside the container and run /opt/check.sh
+          # The container image already has /opt/check.sh which builds .deb, installs it, and runs tests
+          docker run --rm --privileged -v "${{ github.workspace }}:/mnt" bebra11111111/my-shell-app:latest bash -lc "
+            cd /mnt && /opt/check.sh
           "
 
       - name: Run check.sh
