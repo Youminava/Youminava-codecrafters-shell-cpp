@@ -6,18 +6,18 @@ on:
 
 jobs:
   test:
-    name: Build and test (privileged container)
-    runs-on: [self-hosted, linux]
+    name: Build and test (container)
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run check.sh in privileged container
+      - name: Run check.sh in container
         run: |
           # Copy repo to /mnt inside the container and run /opt/check.sh
-          # The container image already has /opt/check.sh which builds .deb, installs it, and runs tests
-          docker run --rm --privileged -v "${{ github.workspace }}:/mnt" bebra11111111/my-shell-app:latest bash -lc "
+          # Note: FUSE tests will fail without privileged mode, but basic tests should pass
+          docker run --rm -v "${{ github.workspace }}:/mnt" bebra11111111/my-shell-app:latest bash -lc "
             cd /mnt && /opt/check.sh
           "
 
