@@ -14,9 +14,11 @@ jobs:
 
       - name: Run tests in Docker
         run: |
-          docker run --privileged \
-            -v $(pwd):/mnt \
-            bebra11111111/my-shell-app:latest
+          # Run the container and execute the check script which builds the .deb and runs tests
+          docker run --rm --privileged \
+            -v "$(pwd):/mnt" \
+            bebra11111111/my-shell-app:latest \
+            bash -lc "cd /mnt && /opt/check.sh"
 
       - name: Collect deb artifact
         run: |
