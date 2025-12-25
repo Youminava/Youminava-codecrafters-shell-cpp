@@ -1,33 +1,38 @@
 name: CI
 
+name: CI
+
 on:
   push:
   pull_request:
 
 jobs:
   test:
+    name: test
     runs-on: ubuntu-latest
+    # Run the job inside the CI image (no --privileged possible on GitHub-hosted runners)
+    container:
+      image: bebra11111111/my-shell-app:latest
 
     steps:
-      - name: Checkout project
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run tests in Docker
+      - name: Copy repo to /mnt
         run: |
-          # Run the container and execute the check script which builds the .deb and runs tests
-          docker run --rm --privileged \
-            -v "$(pwd):/mnt" \
-            bebra11111111/my-shell-app:latest \
-            bash -lc "cd /mnt && /opt/check.sh"
+          cp -r . /mnt/
 
-      - name: Collect deb artifact
+      - name: Run /opt/check.sh inside image
         run: |
-          # We know check.sh writes the package to /mnt/kubsh.deb inside the container
+          # check.sh is expected to build the .deb and run tests
+          /opt/check.sh
+
+      - name: Copy built .deb to workspace
+        run: |
           if [ -f /mnt/kubsh.deb ]; then
             cp /mnt/kubsh.deb ./kubsh.deb
-            echo "Copied /mnt/kubsh.deb to ./kubsh.deb"
           else
-            echo "Error: kubsh.deb not found at /mnt/kubsh.deb" >&2
+            echo "Error: /mnt/kubsh.deb not found" >&2
             exit 1
           fi
 
