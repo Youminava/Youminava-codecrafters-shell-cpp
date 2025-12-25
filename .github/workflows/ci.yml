@@ -6,25 +6,30 @@ on:
 
 jobs:
   test:
-    name: Build and test (container)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Run check.sh in container
+      - name: Run tests in Docker
         run: |
-          # Copy repo to /mnt inside the container and run /opt/check.sh
-          # Note: FUSE tests will fail without privileged mode, but basic tests should pass
-          docker run --rm -v "${{ github.workspace }}:/mnt" bebra11111111/my-shell-app:latest bash -lc "
-            cd /mnt && /opt/check.sh
-          "
+          docker run --privileged \
+            -v $(pwd):/mnt \
+            bebra11111111/my-shell-app:latest
 
-      - name: Run check.sh
-        run: /opt/check.sh
+      - name: Collect deb artifact
+        run: |
+          # We know check.sh writes the package to /mnt/kubsh.deb inside the container
+          if [ -f /mnt/kubsh.deb ]; then
+            cp /mnt/kubsh.deb ./kubsh.deb
+            echo "Copied /mnt/kubsh.deb to ./kubsh.deb"
+          else
+            echo "Error: kubsh.deb not found at /mnt/kubsh.deb" >&2
+            exit 1
+          fi
 
-      - name: Upload kubsh.deb
+      - name: Upload DEB artifact
         uses: actions/upload-artifact@v4
         with:
           name: kubsh-deb
