@@ -1,6 +1,4 @@
-name: CI
-
-name: CI
+name: Test Pipeline
 
 on:
   push:
@@ -8,36 +6,28 @@ on:
 
 jobs:
   test:
-    name: test
     runs-on: ubuntu-latest
-    # Run the job inside the CI image (no --privileged possible on GitHub-hosted runners)
     container:
       image: bebra11111111/my-shell-app:latest
-
+      options: --user root  # Для возможности копирования файлов
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Copy repo to /mnt
+        
+      - name: Run tests and build package
         run: |
+          # Копируем файлы в /mnt (как в GitLab CI)
           cp -r . /mnt/
-
-      - name: Run /opt/check.sh inside image
-        run: |
-          # check.sh is expected to build the .deb and run tests
+          
+          # Запускаем проверочный скрипт
           /opt/check.sh
-
-      - name: Copy built .deb to workspace
-        run: |
-          if [ -f /mnt/kubsh.deb ]; then
-            cp /mnt/kubsh.deb ./kubsh.deb
-          else
-            echo "Error: /mnt/kubsh.deb not found" >&2
-            exit 1
-          fi
-
-      - name: Upload DEB artifact
+          
+          # Копируем собранный пакет из /mnt в текущую директорию
+          cp /mnt/kubsh.deb .
+          
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kubsh-deb
+          name: kubsh-package
           path: kubsh.deb
+          retention-days: 7  # Аналог expire_in: 1 week
